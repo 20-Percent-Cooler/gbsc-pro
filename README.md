@@ -4,9 +4,9 @@
 
 ---
 
-Custom firmware for the GBSC-Pro video upscaler by 20 percent cooler (base on brisma work that is based on op
+Custom firmware for the GBSC-Pro video upscaler by 20 percent cooler
 
-Converts retro console video signals to HDMI up to 1200p with low latency. 
+Converts retro console video signals up to 1200p with low latency. 
 based on brisma work - https://github.com/brisma/gbsc-pro/
 
 
