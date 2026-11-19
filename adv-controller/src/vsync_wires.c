@@ -198,18 +198,26 @@ void VSW_Get(AdvVsync *v)
     }
 }
 
-static void chan_age(vsw_chan_t *c, uint32_t now)
+/* Every main loop pass: interrupts go off only to clear a stale channel, and only if no edge came in between */
+static void chan_age(vsw_chan_t *c)
 {
-    if (c->alive && now - c->last >= PRESENT_CYC) c->alive = 0U;
-    if (c->perOk && now - c->perAt >= PRESENT_CYC) c->perOk = 0U;
+    if (!c->alive && !c->perOk) return;
+    const uint32_t edges = c->edges;
+    const uint32_t now = DWT->CYCCNT;
+    const uint8_t lastOld = (uint8_t)(c->alive && now - c->last >= PRESENT_CYC);
+    const uint8_t perOld = (uint8_t)(c->perOk && now - c->perAt >= PRESENT_CYC);
+    if (!lastOld && !perOld) return;
+    __disable_irq();
+    if (c->edges == edges) {
+        if (lastOld) c->alive = 0U;
+        if (perOld) c->perOk = 0U;
+    }
+    __enable_irq();
 }
 
 void VSW_Task(void)
 {
     if (!s_on) return;
-    __disable_irq();
-    const uint32_t t = DWT->CYCCNT;
-    chan_age(&s_src, t);
-    chan_age(&s_out, t);
-    __enable_irq();
+    chan_age(&s_src);
+    chan_age(&s_out);
 }
