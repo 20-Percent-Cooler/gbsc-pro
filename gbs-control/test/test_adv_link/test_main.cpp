@@ -289,6 +289,25 @@ void test_signal_round_trip(void) {
     TEST_ASSERT_FALSE(advSignalUnpack(b, sizeof(b) - 1, &c));   // wrong length
 }
 
+void test_vsync_round_trip(void) {
+    TEST_ASSERT_EQUAL_HEX8(0x4B, ADV_CMD_VSYNC);
+    TEST_ASSERT_EQUAL_HEX8(0x40, ADV_CMD_VSYNC & ADV_WANT_REPLY);    // a request that always wants its reply
+    TEST_ASSERT_EQUAL_HEX8(8, ADV_INFO_CAP_VSYNC);
+    AdvVsync a; memset(&a, 0, sizeof(a));
+    a.flags = ADV_VS_SRC | ADV_VS_OUT | ADV_VS_PHASE; a.seq = 200;
+    a.srcPeriodNs = 16714756; a.outPeriodNs = 16714760; a.phaseNs = 6346000; a.ageMs = 0x1234;   // N64 240p, locked
+    uint8_t b[ADV_VSYNC_BYTES];
+    TEST_ASSERT_EQUAL_UINT32(ADV_VSYNC_BYTES, advVsyncPack(&a, b));
+    const uint8_t want[ADV_VSYNC_BYTES] = {7, 200, 0x04, 0x0C, 0xFF, 0x00, 0x08, 0x0C, 0xFF, 0x00,
+                                           0x10, 0xD5, 0x60, 0x00, 0x34, 0x12};
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(want, b, ADV_VSYNC_BYTES);
+    AdvVsync c; TEST_ASSERT_TRUE(advVsyncUnpack(b, sizeof(b), &c));
+    TEST_ASSERT_EQUAL_HEX8(a.flags, c.flags); TEST_ASSERT_EQUAL_UINT8(a.seq, c.seq);
+    TEST_ASSERT_EQUAL_UINT32(a.srcPeriodNs, c.srcPeriodNs); TEST_ASSERT_EQUAL_UINT32(a.outPeriodNs, c.outPeriodNs);
+    TEST_ASSERT_EQUAL_UINT32(a.phaseNs, c.phaseNs); TEST_ASSERT_EQUAL_UINT16(a.ageMs, c.ageMs);
+    TEST_ASSERT_FALSE(advVsyncUnpack(b, sizeof(b) - 1, &c));   // wrong length
+}
+
 void test_info_version_always_terminated(void) {
     AdvInfo a; memset(&a, 0, sizeof(a));
     memset(a.fw, 'X', sizeof(a.fw));                             // no NUL
@@ -481,6 +500,7 @@ int main(int, char**) {
     RUN_TEST(test_info_version_always_terminated);
     RUN_TEST(test_info_caps_byte);
     RUN_TEST(test_signal_round_trip);
+    RUN_TEST(test_vsync_round_trip);
     RUN_TEST(test_crc32);
     RUN_TEST(test_update_payloads);
     RUN_TEST(test_reg_read_pack_roundtrip);

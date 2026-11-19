@@ -67,6 +67,7 @@ void WDT_Refresh(void) {}
 uint32_t halTimeUs(void) { return 0; }
 uint32_t halReply(const uint8_t* f, uint8_t n, uint32_t a, uint32_t b) { (void)f; (void)n; (void)a; (void)b; return 0; }
 void halInfo(AdvInfo* out) { memset(out, 0, sizeof(*out)); }
+void VSW_Get(AdvVsync* out) { memset(out, 0, sizeof(*out)); }   /* no wires on the host */
 int halStagingErase(uint8_t s) { (void)s; return -1; }
 int halStagingProgram(uint32_t o, const uint8_t* d, uint8_t l) { (void)o; (void)d; (void)l; return -1; }
 const uint8_t* halStagingPtr(void) { static uint8_t z[1]; return z; }

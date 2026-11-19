@@ -16,6 +16,8 @@
 #endif
 
 #include <ESP8266WiFi.h>
+#include "pro/input/input-types.h"
+#include "pro/link/adv-link-device.h"
 
 // FS_DEBUG:      full verbose debug over serial
 // FS_DEBUG_LED:  just blink LED (off = adjust phase, on = normal phase)
@@ -108,6 +110,39 @@ private:
     /// Reset with syncLastCorrection.
     static float maybeFreqExt_per_videoFps;
 
+    // Vsync wires (modded board: J18 pins 4 and 3, ADV_CMD_VSYNC). The ADV Controller times the output vsync and the
+    // LM1881's source vsync; the debug pin then only measures once per reset(), for the constant between the wires'
+    // phase and the pin's (VS_OUT vs the VDS vblank, the LM1881 vs the IF vsync: a fixed delay per mode).
+    static bool wireCalNeeded;       // reset(): the next wire reading also measures the pin
+    static int32_t wireOffset;       // ESP cycles: pin phase = wire phase + wireOffset
+    static bool lastWasWire;         // the last vsyncPeriodAndPhase() came from the wires
+
+    // The wires' periods and phase (ESP cycles), when a fresh, plausible reading exists on an RGB input (the LM1881
+    // follows the RGB SCART / RGB SoG sync; on the other inputs it sees another line)
+    static bool wireSample(int32_t *periodInput, int32_t *periodOutput, int32_t *phase)
+    {
+        advLinkVsyncWant();   // keeps the ADV link polling while frame lock measures
+        if (uopt->activeInputType != InputTypeRGBs && uopt->activeInputType != InputTypeRGsB) return false;
+        AdvVsync v;
+        if (!advLinkVsync(v, 600)) return false;
+        const uint8_t all = ADV_VS_SRC | ADV_VS_OUT | ADV_VS_PHASE;
+        if ((v.flags & all) != all) return false;
+        const uint32_t src = v.srcPeriodNs, out = v.outPeriodNs;
+        if (src < 11600000UL || src > 25000000UL) return false;            // 40..86 Hz
+        if ((out > src ? out - src : src - out) > src / 16) return false;   // within 6 %: one signal, one output
+        const uint32_t mhz = ESP.getCpuFreqMHz();
+        *periodInput = (int32_t)((uint64_t)src * mhz / 1000U);
+        if (periodOutput) *periodOutput = (int32_t)((uint64_t)out * mhz / 1000U);
+        *phase = (int32_t)((uint64_t)(v.phaseNs % src) * mhz / 1000U);
+        return true;
+    }
+
+    static int32_t wrapPhase(int32_t ph, int32_t period)   // into [0, period)
+    {
+        ph %= period;
+        return ph < 0 ? ph + period : ph;
+    }
+
     // Sample vsync start and stop times from debug pin.
     static bool vsyncOutputSample(uint32_t *start, uint32_t *stop)
     {
@@ -140,11 +175,39 @@ private:
         return true;
     }
 
-    // Sample input and output vsync periods and their phase
-    // difference in microseconds
+    // Input and output vsync periods and their phase, in ESP cycles: from the vsync wires when they run (the debug
+    // pin once per reset() for their offset), else from the debug pin
     static bool vsyncPeriodAndPhase(int32_t *periodInput, int32_t *periodOutput, int32_t *phase)
     {
-        fsDebugPrintf("vsyncPeriodAndPhase(), TEST_BUS_SEL=%d\n", GBS::TEST_BUS_SEL::read());
+        int32_t wIn, wOut, wPh;
+        lastWasWire = false;
+        if (!wireSample(&wIn, &wOut, &wPh)) return pinPeriodAndPhase(periodInput, periodOutput, phase);
+        if (wireCalNeeded) {
+            int32_t pIn, pOut, pPh;
+            if (!pinPeriodAndPhase(&pIn, &pOut, &pPh)) return false;
+            int32_t d = wrapPhase(pPh - wPh, wIn);
+            wireOffset = d > wIn / 2 ? d - wIn : d;   // the short way round
+            wireCalNeeded = false;
+            const uint32_t mhz = ESP.getCpuFreqMHz();
+            logPrintf(LC_SYNC, LL_INFO, PSTR("frame lock: vsync wires, phase offset %ld us (pin %ld us, wires %ld us)"),
+                      (long)(wireOffset / (int32_t)mhz), (long)(pPh / (int32_t)mhz), (long)(wPh / (int32_t)mhz));
+            if (periodInput) *periodInput = pIn;
+            if (periodOutput) *periodOutput = pOut;
+            if (phase) *phase = pPh;
+            return true;
+        }
+        if (periodInput) *periodInput = wIn;
+        if (periodOutput) *periodOutput = wOut;
+        if (phase) *phase = wrapPhase(wPh + wireOffset, wIn);
+        lastWasWire = true;
+        return true;
+    }
+
+    // Sample input and output vsync periods and their phase
+    // difference in microseconds
+    static bool pinPeriodAndPhase(int32_t *periodInput, int32_t *periodOutput, int32_t *phase)
+    {
+        fsDebugPrintf("pinPeriodAndPhase(), TEST_BUS_SEL=%d\n", GBS::TEST_BUS_SEL::read());
 
         uint32_t inStart, inStop, outStart, outStop;
         uint32_t inPeriod, outPeriod, diff;
@@ -277,6 +340,7 @@ public:
         syncLockReady = false;
         syncLastCorrection = 0;
         delayLock = 0;
+        wireCalNeeded = true;   // a new mode: the wires' offset to the pin is measured again
         // Don't clear maybeFreqExt_per_videoFps.
         //
         // Clearing is unsafe, since many callers call reset(), don't
@@ -564,6 +628,10 @@ public:
                     fpsInput);
                 continue;
             }
+            if (lastWasWire) {   // the wires' period is already a mean of consecutive fields: no second look
+                success = true;
+                break;
+            }
 
             // Measure input period again. vsyncPeriodAndPhase()/getPulseTicks()
             // -> vsyncInputSample() depend on GBS::TEST_BUS_SEL = 0, but
@@ -688,4 +756,13 @@ bool FrameSyncManager<GBS, Attrs>::syncLockReady;
 
 template <class GBS, class Attrs>
 float FrameSyncManager<GBS, Attrs>::smoothedFpsInput;
+
+template <class GBS, class Attrs>
+bool FrameSyncManager<GBS, Attrs>::wireCalNeeded = true;
+
+template <class GBS, class Attrs>
+int32_t FrameSyncManager<GBS, Attrs>::wireOffset;
+
+template <class GBS, class Attrs>
+bool FrameSyncManager<GBS, Attrs>::lastWasWire;
 #endif

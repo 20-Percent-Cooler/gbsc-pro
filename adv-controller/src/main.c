@@ -1,5 +1,6 @@
 #include "main.h"
 #include "debug_uart.h"
+#include "vsync_wires.h"
 #include "console_hc32.h"
 #include "usb_console.h"
 
@@ -90,6 +91,7 @@ int main(void)
     TMR0_Start(CM_TMR0_2, TMR0_CHA);
     UART_DMA_Init();
     DebugUart_Init();
+    VSW_Init();                                 /* vsync wires (modded boards; ADV_CMD_VSYNC) */
 
     printf("\r\n[SYSTEM] ADV Controller ready\r\n");
 
