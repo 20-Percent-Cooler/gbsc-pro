@@ -33,6 +33,9 @@ typedef struct {
     volatile uint8_t w, n;                 /* ring write index, entries */
     volatile uint32_t perAt;               /* when the last period was added */
     uint8_t pair;                          /* average two consecutive periods (source) */
+    /* last / perAt are current: set by an edge, cleared by VSW_Task() once older than PRESENT_CYC. The cycle
+     * counter wraps every 21.47 s, so an age test alone would see a stopped signal come back for 100 ms. */
+    volatile uint8_t alive, perOk;
 } vsw_chan_t;
 
 typedef struct {
@@ -49,7 +52,7 @@ static uint8_t s_on;
 
 static void chan_edge(vsw_chan_t *c, uint32_t now)
 {
-    if (c->edges) {
+    if (c->alive) {                                             /* else: a restart, no period across the gap */
         const uint32_t p = now - c->last;
         if (p > CYC_PER_SEC / 87U && p < CYC_PER_SEC / 39U) {   /* 40..86 Hz */
             const uint32_t q = (c->pair && c->prev) ? (p + c->prev) / 2U : p;
@@ -58,12 +61,14 @@ static void chan_edge(vsw_chan_t *c, uint32_t now)
             c->w = (uint8_t)((c->w + 1U) % RING);
             if (c->n < RING) c->n++;
             c->perAt = now;
+            c->perOk = 1U;
         } else {
             c->prev = 0U;
             c->n = 0U;                                          /* a gap: the old periods are another signal's */
         }
     }
     c->last = now;
+    c->alive = 1U;
     c->edges++;
 }
 
@@ -96,7 +101,7 @@ static void out_edge(vsw_lvl_t *L, uint32_t now, uint8_t high)
             L->idleCur++;
             if (byIdle) {                                    /* an idle level ended: this edge starts the vsync */
                 const uint32_t ph = now - s_src.last;
-                out_mark(now, (uint8_t)(s_src.edges && ph < CYC_PER_SEC / 39U), ph);
+                out_mark(now, (uint8_t)(s_src.alive && ph < CYC_PER_SEC / 39U), ph);
             }
         } else if (len >= VS_MIN_CYC) {
             if (len > L->maxCur) L->maxCur = len;
@@ -107,7 +112,7 @@ static void out_edge(vsw_lvl_t *L, uint32_t now, uint8_t high)
     L->high = high;
     L->valid = 1U;
     L->refOk = 0U;
-    if (s_src.edges) {
+    if (s_src.alive) {
         const uint32_t ph = now - s_src.last;
         if (ph < CYC_PER_SEC / 39U) { L->refPh = ph; L->refOk = 1U; }
     }
@@ -118,11 +123,11 @@ static void VSW_IrqCallback(void)
     const uint32_t now = DWT->CYCCNT;
     const uint16_t st = VSW_TMRA->STFLR;
     if (st & TMRA_STFLR_CMPF6) {                                    /* output, PB4, either edge */
-        VSW_TMRA->STFLR = (uint16_t)(VSW_TMRA->STFLR & ~TMRA_STFLR_CMPF6);
+        VSW_TMRA->STFLR = (uint16_t)~TMRA_STFLR_CMPF6;      /* 0 clears, 1 keeps: only this flag */
         out_edge(&s_lvl, now, (CM_GPIO->PIDRB & GPIO_PIN_04) ? 1U : 0U);
     }
     if (st & TMRA_STFLR_CMPF7) {                                    /* source, PB5, falling edge */
-        VSW_TMRA->STFLR = (uint16_t)(VSW_TMRA->STFLR & ~TMRA_STFLR_CMPF7);
+        VSW_TMRA->STFLR = (uint16_t)~TMRA_STFLR_CMPF7;      /* 0 clears, 1 keeps: only this flag */
         chan_edge(&s_src, now);
     }
 }
@@ -163,7 +168,7 @@ void VSW_Init(void)
 
 static uint32_t mean_ns(const vsw_chan_t *c, uint32_t now)
 {
-    if (!c->n || now - c->perAt >= PRESENT_CYC) return 0U;      /* only while current: never another mode's */
+    if (!c->n || !c->perOk || now - c->perAt >= PRESENT_CYC) return 0U;      /* only while current: never another mode's */
     uint64_t sum = 0U;
     const uint8_t n = c->n;
     for (uint8_t i = 0U; i < n; i++) sum += c->ring[(uint8_t)((c->w + RING - 1U - i) % RING)];
@@ -174,10 +179,10 @@ void VSW_Get(AdvVsync *v)
 {
     v->flags = 0U; v->seq = 0U; v->srcPeriodNs = 0U; v->outPeriodNs = 0U; v->phaseNs = 0U; v->ageMs = 0U;
     if (!s_on) return;
-    const uint32_t t = DWT->CYCCNT;
     __disable_irq();
-    const uint8_t src = (uint8_t)(s_src.edges && t - s_src.last < PRESENT_CYC);
-    const uint8_t out = (uint8_t)(s_out.edges && t - s_out.last < PRESENT_CYC);
+    const uint32_t t = DWT->CYCCNT;                              /* inside: an edge between would make the age wrap */
+    const uint8_t src = (uint8_t)(s_src.alive && t - s_src.last < PRESENT_CYC);
+    const uint8_t out = (uint8_t)(s_out.alive && t - s_out.last < PRESENT_CYC);
     v->srcPeriodNs = mean_ns(&s_src, t);
     v->outPeriodNs = mean_ns(&s_out, t);
     const uint32_t ph = s_phase, phAt = s_phaseAt;
@@ -191,4 +196,20 @@ void VSW_Get(AdvVsync *v)
         const uint32_t age = (t - phAt) / (CYC_PER_SEC / 1000U);
         v->ageMs = (uint16_t)(age > 0xFFFFU ? 0xFFFFU : age);
     }
+}
+
+static void chan_age(vsw_chan_t *c, uint32_t now)
+{
+    if (c->alive && now - c->last >= PRESENT_CYC) c->alive = 0U;
+    if (c->perOk && now - c->perAt >= PRESENT_CYC) c->perOk = 0U;
+}
+
+void VSW_Task(void)
+{
+    if (!s_on) return;
+    __disable_irq();
+    const uint32_t t = DWT->CYCCNT;
+    chan_age(&s_src, t);
+    chan_age(&s_out, t);
+    __enable_irq();
 }

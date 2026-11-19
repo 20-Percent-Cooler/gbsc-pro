@@ -103,6 +103,7 @@ int main(void)
     for (;;)
     {
         LINK_Poll();   /* frames from the ESP: STATE diff applied at once */
+        VSW_Task();    /* ages the vsync wire timestamps */
 
         if (g_u16_sys_timer >= SYS_TIMEOUT_50MS)
         {
