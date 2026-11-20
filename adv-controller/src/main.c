@@ -2,6 +2,7 @@
 #include "debug_uart.h"
 #include "vsync_wires.h"
 #include "i2c_vsync.h"
+#include "i2c_probe.h"
 #include "console_hc32.h"
 #include "usb_console.h"
 
@@ -94,12 +95,14 @@ int main(void)
     DebugUart_Init();
     VSW_Init();                                 /* vsync wires (modded boards) */
     I2CV_Init();                                /* ... read by the ESP over I2C (J17 mod; idle without it) */
+    I2CProbe_Init();                            /* passive ESP-bus probe, off until p1/p2 (i2c_probe.h) */
 
     printf("\r\n[SYSTEM] ADV Controller ready\r\n");
 
     WDT_Config();
 
     LINK_Init();
+    I2CProbe_SetPort(usbPort);
     CONSOLE_HC32_Init(usbPort);                 /* after this, no printf: console output is non-blocking */
 
     for (;;)
@@ -107,6 +110,7 @@ int main(void)
         LINK_Poll();   /* frames from the ESP: STATE diff applied at once */
         VSW_Task();    /* ages the vsync wire timestamps */
         I2CV_Task(g_u32_ms);   /* the frame the ESP reads over I2C */
+        I2CProbe_Task();       /* prints captured bus transfers (p1/p2) */
 
         if (g_u16_sys_timer >= SYS_TIMEOUT_50MS)
         {

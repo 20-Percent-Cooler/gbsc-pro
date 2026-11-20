@@ -1,5 +1,6 @@
 /* Device glue of the console (HC32 DDL): USART3 port (non-blocking ring), USB CDC port (usb_console.c), I2C access */
 #include "i2c_vsync.h"
+#include "i2c_probe.h"
 #include "vsync_wires.h"
 #include <stdio.h>
 #include "console_hc32.h"
@@ -49,6 +50,17 @@ static void cmdVsync(uint8_t port, const char *args)   /* vsync wires and their 
     CONSOLE_Write(port, b);
 }
 
+/* Passive probe of the ESP's I2C bus (i2c_probe.h): p1 changes, p2 raw writes, p0 off, ps stats, pc forget,
+ * ph read histogram, po1/po0 OLED transfers */
+static void cmdP1(uint8_t port, const char *a) { (void)port; (void)a; I2CProbe_Enable(PROBE_MODE_CHANGES); }
+static void cmdP2(uint8_t port, const char *a) { (void)port; (void)a; I2CProbe_Enable(PROBE_MODE_RAW); }
+static void cmdP0(uint8_t port, const char *a) { (void)port; (void)a; I2CProbe_Enable(PROBE_MODE_OFF); }
+static void cmdPs(uint8_t port, const char *a) { (void)port; (void)a; I2CProbe_PrintStats(); }
+static void cmdPc(uint8_t port, const char *a) { (void)a; I2CProbe_Forget(); CONSOLE_Write(port, "[PROBE] register copies cleared\r\n"); }
+static void cmdPh(uint8_t port, const char *a) { (void)port; (void)a; I2CProbe_PrintHistogram(); }
+static void cmdPo1(uint8_t port, const char *a) { (void)port; (void)a; I2CProbe_OledLog(1U); }
+static void cmdPo0(uint8_t port, const char *a) { (void)port; (void)a; I2CProbe_OledLog(0U); }
+
 static void cmdUpdate(uint8_t port, const char *args)
 {
     (void)args;
@@ -66,6 +78,14 @@ void CONSOLE_HC32_Init(const ConsolePort *usb)
     CONSOLE_Init(&kUart, usb, i2cRead, i2cWrite);
     CONSOLE_AddCommand("info", cmdInfo);
     CONSOLE_AddCommand("vs", cmdVsync);
+    CONSOLE_AddCommand("p1", cmdP1);
+    CONSOLE_AddCommand("p2", cmdP2);
+    CONSOLE_AddCommand("p0", cmdP0);
+    CONSOLE_AddCommand("ps", cmdPs);
+    CONSOLE_AddCommand("pc", cmdPc);
+    CONSOLE_AddCommand("ph", cmdPh);
+    CONSOLE_AddCommand("po1", cmdPo1);
+    CONSOLE_AddCommand("po0", cmdPo0);
     CONSOLE_AddCommand("update", cmdUpdate);
     CONSOLE_Banner(0);
     CONSOLE_Write(0, ">");

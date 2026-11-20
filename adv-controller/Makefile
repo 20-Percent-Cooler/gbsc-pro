@@ -49,6 +49,7 @@ C_SOURCES = \
     $(SRC_DIR)/signal.c \
     $(SRC_DIR)/vsync_wires.c \
     $(SRC_DIR)/i2c_vsync.c \
+    $(SRC_DIR)/i2c_probe.c \
     $(SRC_DIR)/debug_uart.c \
     $(SRC_DIR)/console.c \
     $(SRC_DIR)/console_hc32.c \

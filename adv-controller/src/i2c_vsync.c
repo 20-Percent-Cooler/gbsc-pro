@@ -8,6 +8,7 @@
  * frames. The interrupts only move bytes (no clock stretching beyond a few us). */
 #include "i2c_vsync.h"
 #include "vsync_wires.h"
+#include "i2c_probe.h"
 #include "main.h"
 #include <string.h>
 
@@ -108,7 +109,7 @@ void I2CV_Init(void)
 /* Standard I2C bus recovery from this side: SCL clocked (open drain) until the slave holding SDA lets go, then a
  * STOP. Only while nobody else drives the bus (SDA held low with SCL idle for I2CV_STUCK_MS: no transfer does that,
  * so the ESP is in reset or being flashed). */
-static void busRecover(void)
+static uint8_t busRecover(uint8_t *released)   /* returns the clocks it took */
 {
     stc_gpio_init_t g;
     (void)GPIO_StructInit(&g);
@@ -120,10 +121,12 @@ static void busRecover(void)
     (void)GPIO_Init(I2CV_SCL_PORT, I2CV_SCL_PIN, &g);
     (void)GPIO_Init(I2CV_SDA_PORT, I2CV_SDA_PIN, &g);
     DDL_DelayUS(5U);
-    for (uint8_t i = 0U; i < 9U && (CM_GPIO->PIDRA & I2CV_SDA_PIN) == 0U; i++) {
+    uint8_t clocks = 0U;
+    for (; clocks < 9U && (CM_GPIO->PIDRA & I2CV_SDA_PIN) == 0U; clocks++) {
         GPIO_ResetPins(I2CV_SCL_PORT, I2CV_SCL_PIN); DDL_DelayUS(5U);
         GPIO_SetPins(I2CV_SCL_PORT, I2CV_SCL_PIN);   DDL_DelayUS(5U);
     }
+    *released = (CM_GPIO->PIDRA & I2CV_SDA_PIN) != 0U ? 1U : 0U;
     GPIO_ResetPins(I2CV_SCL_PORT, I2CV_SCL_PIN); DDL_DelayUS(5U);   /* STOP: SDA rises while SCL is high */
     GPIO_ResetPins(I2CV_SDA_PORT, I2CV_SDA_PIN); DDL_DelayUS(5U);
     GPIO_SetPins(I2CV_SCL_PORT, I2CV_SCL_PIN);   DDL_DelayUS(5U);
@@ -133,6 +136,7 @@ static void busRecover(void)
     (void)GPIO_Init(I2CV_SDA_PORT, I2CV_SDA_PIN, &g);
     GPIO_SetFunc(I2CV_SCL_PORT, I2CV_SCL_PIN, I2CV_SCL_FUNC);
     GPIO_SetFunc(I2CV_SDA_PORT, I2CV_SDA_PIN, I2CV_SDA_FUNC);
+    return clocks;
 }
 
 /* A master reset in the middle of a transfer (the ESP flashed or reset by esptool) can leave a slave on the ESP's bus
@@ -145,13 +149,16 @@ static void unstick(uint32_t nowMs)
     const uint8_t stuck = ((in & I2CV_SDA_PIN) == 0U) && ((in & I2CV_SCL_PIN) != 0U);
     if (!stuck) { s_stuckSince = 0U; return; }
     if (s_stuckSince == 0U) { s_stuckSince = nowMs + 1U; return; }
-    if (nowMs + 1U - s_stuckSince < I2CV_STUCK_MS) return;
+    const uint32_t stuckMs = nowMs + 1U - s_stuckSince;
+    if (stuckMs < I2CV_STUCK_MS) return;
     s_stuckSince = 0U;
     s_unsticks++;
     I2C_Cmd(I2CV_UNIT, DISABLE);
     s_txi = 0U;
-    busRecover();
+    uint8_t released = 0U;
+    const uint8_t clocks = busRecover(&released);
     (void)periphInit();
+    I2CProbe_ReportStuck(stuckMs, clocks, released);
 }
 
 void I2CV_Task(uint32_t nowMs)
