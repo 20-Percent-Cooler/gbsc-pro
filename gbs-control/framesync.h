@@ -20,6 +20,9 @@
 #include "pro/link/adv-link-device.h"
 #include "pro/link/vsync-i2c.h"
 
+uint16_t profileSourceLines();                                          // gbs-control.ino
+bool menuSourceInterlaced(uint8_t videoStandardInput, uint16_t vperiodIf);   // pro/ui/menu-signal.cpp
+
 // FS_DEBUG:      full verbose debug over serial
 // FS_DEBUG_LED:  just blink LED (off = adjust phase, on = normal phase)
 //#define FS_DEBUG
@@ -112,10 +115,12 @@ private:
     static float maybeFreqExt_per_videoFps;
 
     // Vsync wires (modded board: J18 pins 4 and 3, read over I2C with the J17 mod). The ADV Controller times the output vsync and the
-    // LM1881's source vsync; the debug pin then only measures once per reset(), for the constant between the wires'
-    // phase and the pin's (VS_OUT vs the VDS vblank, the LM1881 vs the IF vsync: a fixed delay per mode).
-    static bool wireCalNeeded;       // reset(): the next wire reading also measures the pin
-    static int32_t wireOffset;       // ESP cycles: pin phase = wire phase + wireOffset
+    // LM1881's source vsync; the debug pin then only measures once per reset() and scan type, for the constant
+    // between the wires' phase and the pin's (VS_OUT vs the VDS vblank, the LM1881 vs the IF vsync: a fixed delay per
+    // mode). Progressive and interlaced keep their own: frame lock isn't reset on a 240p <-> 480i switch with the clock
+    // generator, and the IF vsync sits ~0.25 ms further from the LM1881 in 480i (N64: 772 vs 1026 us).
+    static bool wireCalNeeded[2];    // [interlaced] reset(): the next wire reading in that scan type also measures the pin
+    static int32_t wireOffset[2];    // [interlaced] ESP cycles: pin phase = wire phase + wireOffset
     static bool lastWasWire;         // the last vsyncPeriodAndPhase() came from the wires
 
     // The wires' periods and phase (ESP cycles), when a fresh, plausible reading exists on an RGB input (the LM1881
@@ -182,15 +187,17 @@ private:
         int32_t wIn, wOut, wPh;
         lastWasWire = false;
         if (!wireSample(&wIn, &wOut, &wPh)) return pinPeriodAndPhase(periodInput, periodOutput, phase);
-        if (wireCalNeeded) {
+        const uint8_t m = menuSourceInterlaced(rto->videoStandardInput, profileSourceLines()) ? 1 : 0;
+        if (wireCalNeeded[m]) {
             int32_t pIn, pOut, pPh;
             if (!pinPeriodAndPhase(&pIn, &pOut, &pPh)) return false;
             int32_t d = wrapPhase(pPh - wPh, wIn);
-            wireOffset = d > wIn / 2 ? d - wIn : d;   // the short way round
-            wireCalNeeded = false;
+            wireOffset[m] = d > wIn / 2 ? d - wIn : d;   // the short way round
+            wireCalNeeded[m] = false;
             const uint32_t mhz = ESP.getCpuFreqMHz();
-            logPrintf(LC_SYNC, LL_INFO, PSTR("frame lock: vsync wires, phase offset %ld us (pin %ld us, wires %ld us)"),
-                      (long)(wireOffset / (int32_t)mhz), (long)(pPh / (int32_t)mhz), (long)(wPh / (int32_t)mhz));
+            logPrintf(LC_SYNC, LL_INFO, PSTR("frame lock: vsync wires, %s phase offset %ld us (pin %ld us, wires %ld us)"),
+                      m ? "interlaced" : "progressive", (long)(wireOffset[m] / (int32_t)mhz),
+                      (long)(pPh / (int32_t)mhz), (long)(wPh / (int32_t)mhz));
             if (periodInput) *periodInput = pIn;
             if (periodOutput) *periodOutput = pOut;
             if (phase) *phase = pPh;
@@ -198,7 +205,7 @@ private:
         }
         if (periodInput) *periodInput = wIn;
         if (periodOutput) *periodOutput = wOut;
-        if (phase) *phase = wrapPhase(wPh + wireOffset, wIn);
+        if (phase) *phase = wrapPhase(wPh + wireOffset[m], wIn);
         lastWasWire = true;
         return true;
     }
@@ -346,7 +353,7 @@ public:
         syncLockReady = false;
         syncLastCorrection = 0;
         delayLock = 0;
-        wireCalNeeded = true;   // a new mode: the wires' offset to the pin is measured again
+        wireCalNeeded[0] = wireCalNeeded[1] = true;   // a new mode: the wires' offsets to the pin are measured again
         // Don't clear maybeFreqExt_per_videoFps.
         //
         // Clearing is unsafe, since many callers call reset(), don't
@@ -762,10 +769,10 @@ template <class GBS, class Attrs>
 float FrameSyncManager<GBS, Attrs>::smoothedFpsInput;
 
 template <class GBS, class Attrs>
-bool FrameSyncManager<GBS, Attrs>::wireCalNeeded = true;
+bool FrameSyncManager<GBS, Attrs>::wireCalNeeded[2] = {true, true};
 
 template <class GBS, class Attrs>
-int32_t FrameSyncManager<GBS, Attrs>::wireOffset;
+int32_t FrameSyncManager<GBS, Attrs>::wireOffset[2];
 
 template <class GBS, class Attrs>
 bool FrameSyncManager<GBS, Attrs>::lastWasWire;
