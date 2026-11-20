@@ -2,7 +2,8 @@
 // ADV_VSYNC_I2C_ADDR and every read returns its latest vsync wire reading (adv-controller/src/i2c_vsync.c).
 // Detected like the other chips (platformDetect's probe, then again every few seconds while absent: the HC32 can
 // still be starting at the ESP's boot). Without the mod nothing answers and frame lock uses the debug pin.
-// Loop context only (Wire).
+// The vsync-pico add-on (a Pico on J15 timing the debug pin and the output vsync) answers at VSYNC_PICO_I2C_ADDR
+// with the same frame and is used first. Loop context only (Wire).
 #pragma once
 #include <stdint.h>
 #include "adv-link.h"

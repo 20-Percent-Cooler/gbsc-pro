@@ -9,13 +9,26 @@
 static bool gInit = false, gPresent = false;
 static uint32_t gProbeAt = 0, gReads = 0, gFails = 0, gProbes = 0;
 static uint8_t gFailRun = 0;
+static uint8_t gAddr = ADV_VSYNC_I2C_ADDR;   // the slave in use: the vsync-pico add-on first, else the ADV Controller
 static const uint32_t kProbeEveryMs = 5000;
 static const uint8_t kLostAfter = 10;   // bad reads in a row: probe again (a reset HC32, a loose wire)
 
-static bool probeNow() {
+static bool probeAddr(uint8_t a) {
     gProbes++;
-    Wire.beginTransmission(ADV_VSYNC_I2C_ADDR);
+    Wire.beginTransmission(a);
     return Wire.endTransmission() == 0;
+}
+
+// The vsync-pico add-on (0x33: the TV5725's own vsync, every input) before the ADV Controller (0x32, the J17 mod)
+static bool probeNow() {
+    if (probeAddr(VSYNC_PICO_I2C_ADDR)) { gAddr = VSYNC_PICO_I2C_ADDR; return true; }
+    if (probeAddr(ADV_VSYNC_I2C_ADDR)) { gAddr = ADV_VSYNC_I2C_ADDR; return true; }
+    return false;
+}
+
+static void logFound() {
+    logPrintf(LC_SYNC, LL_INFO, gAddr == VSYNC_PICO_I2C_ADDR ? PSTR("vsync wires: vsync-pico add-on on I2C (0x%02X)")
+                                                             : PSTR("vsync wires: ADV Controller on I2C (0x%02X)"), gAddr);
 }
 
 bool vsyncI2cPresent() {
@@ -23,16 +36,18 @@ bool vsyncI2cPresent() {
     const uint32_t now = millis();
     if (!gInit) {
         gInit = true;
-        gPresent = platformProbes().advI2c.ack;
+        gPresent = probeAddr(VSYNC_PICO_I2C_ADDR);
+        if (gPresent) gAddr = VSYNC_PICO_I2C_ADDR;
+        else { gPresent = platformProbes().advI2c.ack; gAddr = ADV_VSYNC_I2C_ADDR; }
         gProbeAt = now;
-        if (gPresent) logPrintf(LC_SYNC, LL_INFO, PSTR("vsync wires: ADV Controller on I2C (0x%02X)"), ADV_VSYNC_I2C_ADDR);
+        if (gPresent) logFound();
     }
     if (!gPresent && now - gProbeAt >= kProbeEveryMs) {
         gProbeAt = now;
         if (probeNow()) {
             gPresent = true;
             gFailRun = 0;
-            logPrintf(LC_SYNC, LL_INFO, PSTR("vsync wires: ADV Controller on I2C (0x%02X)"), ADV_VSYNC_I2C_ADDR);
+            logFound();
         }
     }
     return gPresent;
@@ -41,7 +56,7 @@ bool vsyncI2cPresent() {
 bool vsyncI2cRead(AdvVsync& v) {
     if (!vsyncI2cPresent()) return false;
     uint8_t f[ADV_VSYNC_FRAME_BYTES];
-    size_t n = Wire.requestFrom((uint8_t)ADV_VSYNC_I2C_ADDR, (uint8_t)sizeof(f));
+    size_t n = Wire.requestFrom(gAddr, (uint8_t)sizeof(f));
     if (n > sizeof(f)) n = sizeof(f);
     for (size_t i = 0; i < n; i++) f[i] = (uint8_t)Wire.read();
     while (Wire.available()) Wire.read();

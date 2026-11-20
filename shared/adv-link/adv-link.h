@@ -136,6 +136,7 @@ int advSignalUnpack(const uint8_t* in, size_t n, AdvSignal* s);
  * Transport: the J17 mod puts the ADV Controller (I2C2, PA4 SCL / PA5 SDA) on the ESP's I2C bus as a read-only slave
  * at ADV_VSYNC_I2C_ADDR; every read returns one frame. The serial link does not carry it. */
 #define ADV_VSYNC_I2C_ADDR 0x32
+#define VSYNC_PICO_I2C_ADDR 0x33   /* the vsync-pico add-on: the same frame, with ADV_VS_ANY_INPUT */
 #define ADV_VSYNC_FRAME_BYTES 20   /* 'G' 'V' version, the 16 bytes below, check byte */
 #define ADV_VSYNC_BYTES 16
 enum { ADV_VS_SRC = 0x01,      /* source vsync in the last 100 ms */
