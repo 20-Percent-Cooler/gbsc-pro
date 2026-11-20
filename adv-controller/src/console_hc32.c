@@ -42,13 +42,22 @@ static void cmdVsync(uint8_t port, const char *args)   /* vsync wires and their 
     (void)args;
     AdvVsync v;
     VSW_Get(&v);
-    char b[160];
+    char b[192];
     snprintf(b, sizeof(b), "vsync: flags %u src %lu ns out %lu ns phase %lu ns | i2c 0x%02X %s, reads %lu, unsticks %lu\r\n",
              (unsigned)v.flags, (unsigned long)v.srcPeriodNs, (unsigned long)v.outPeriodNs, (unsigned long)v.phaseNs,
              (unsigned)ADV_VSYNC_I2C_ADDR, I2CV_Running() ? "on" : "off", (unsigned long)I2CV_Reads(),
              (unsigned long)I2CV_Unsticks());
     CONSOLE_Write(port, b);
+    VswDebug d;
+    VSW_GetDebug(&d);
+    snprintf(b, sizeof(b), "debug pin (PB3): %s, period %lu ns (min %lu max %lu), edges %lu, frames %lu, after src %ld ns, after out %ld ns\r\n",
+             d.alive ? "running" : "idle", (unsigned long)d.periodNs, (unsigned long)d.minNs, (unsigned long)d.maxNs,
+             (unsigned long)d.edges, (unsigned long)d.frames, (long)d.afterSrcNs, (long)d.afterOutNs);
+    CONSOLE_Write(port, b);
 }
+
+static void cmdVd1(uint8_t port, const char *a) { (void)a; VSW_DebugStream(port, 1U); CONSOLE_Write(port, "[VD] per frame: D <period ns> <after src ns> <after out ns> (-1 = no reference)\r\n"); }
+static void cmdVd0(uint8_t port, const char *a) { (void)a; VSW_DebugStream(port, 0U); CONSOLE_Write(port, "[VD] off\r\n"); }
 
 /* Passive probe of the ESP's I2C bus (i2c_probe.h): p1 changes, p2 raw writes, p0 off, ps stats, pc forget,
  * ph read histogram, po1/po0 OLED transfers */
@@ -78,6 +87,8 @@ void CONSOLE_HC32_Init(const ConsolePort *usb)
     CONSOLE_Init(&kUart, usb, i2cRead, i2cWrite);
     CONSOLE_AddCommand("info", cmdInfo);
     CONSOLE_AddCommand("vs", cmdVsync);
+    CONSOLE_AddCommand("vd1", cmdVd1);
+    CONSOLE_AddCommand("vd0", cmdVd0);
     CONSOLE_AddCommand("p1", cmdP1);
     CONSOLE_AddCommand("p2", cmdP2);
     CONSOLE_AddCommand("p0", cmdP0);

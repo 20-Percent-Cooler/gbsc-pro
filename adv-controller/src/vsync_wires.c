@@ -14,12 +14,19 @@
  * Output: both edges, the pin level read in the interrupt. Some outputs carry line-rate pulses on this wire (480p's
  * wide hsync, ~2.5 us), so the frame mark is the first edge after an idle level longer than 2 ms when the last second
  * had such levels (every clean output), else the start of a 40 us..2 ms level reaching half the longest of the last
- * second (the vsync pulse among line pulses). */
+ * second (the vsync pulse among line pulses).
+ *
+ * Test channel: the TV5725 debug pin (its test bus, also read by the ESP on GPIO12) -> 1k -> J18 pin 5 = PB3 (JTAG
+ * TDO, released): EXTINT 3 on INT013, both edges, the same level logic as the output, each frame mark stamped against
+ * the source and output wires (console 'vs', 'vd1'/'vd0'). Listening only: never sent to the ESP. */
 #include "vsync_wires.h"
+#include "console.h"
 #include "main.h"
+#include <stdio.h>
 
 #define VSW_TMRA        (CM_TMRA_6)
 #define VSW_IRQn        (INT006_IRQn)     /* INT007: the system tick (TMR0_2), INT003: link UART errors */
+#define VSW_DBG_IRQn    (INT013_IRQn)     /* EXTINT 3 (PB3); INT008-010 I2C slave, INT011/012 the bus probe */
 #define CYC_PER_SEC     (200000000UL)
 #define PRESENT_CYC     (CYC_PER_SEC / 10U)        /* "running": an edge in the last 100 ms */
 #define VS_MIN_CYC      (40U * 200U)               /* 40 us */
@@ -44,8 +51,15 @@ typedef struct {
     volatile uint32_t maxCur, maxPrev, idleCur, idlePrev, secAt;
 } vsw_lvl_t;
 
-static vsw_chan_t s_src, s_out;
-static vsw_lvl_t s_lvl;
+static vsw_chan_t s_src, s_out, s_dbg;
+static vsw_lvl_t s_lvl, s_dlvl;
+typedef struct { uint32_t per; int32_t aSrc, aOut; } vsw_dframe_t;
+#define DRING (16U)
+static volatile vsw_dframe_t s_dring[DRING];
+static volatile uint8_t s_dw;
+static uint8_t s_dr, s_dStream, s_dPort;
+static volatile uint32_t s_dFrames;
+static volatile int32_t s_dSrc = -1, s_dOut = -1;
 static volatile uint32_t s_phase, s_phaseAt;
 static volatile uint8_t s_seq, s_phaseOk;
 static uint8_t s_on;
@@ -90,7 +104,9 @@ static void lvl_second(vsw_lvl_t *L, uint32_t now)
     L->secAt = now;
 }
 
-static void out_edge(vsw_lvl_t *L, uint32_t now, uint8_t high)
+typedef void (*vsw_mark_fn)(uint32_t at, uint8_t phOk, uint32_t ph);
+
+static void lvl_edge(vsw_lvl_t *L, uint32_t now, uint8_t high, vsw_mark_fn mark)
 {
     if (high == L->high && L->valid) return;                 /* both edges of a short pulse in one call */
     lvl_second(L, now);
@@ -101,11 +117,11 @@ static void out_edge(vsw_lvl_t *L, uint32_t now, uint8_t high)
             L->idleCur++;
             if (byIdle) {                                    /* an idle level ended: this edge starts the vsync */
                 const uint32_t ph = now - s_src.last;
-                out_mark(now, (uint8_t)(s_src.alive && ph < CYC_PER_SEC / 39U), ph);
+                mark(now, (uint8_t)(s_src.alive && ph < CYC_PER_SEC / 39U), ph);
             }
         } else if (len >= VS_MIN_CYC) {
             if (len > L->maxCur) L->maxCur = len;
-            if (!byIdle && len >= L->maxPrev / 2U) out_mark(start, L->refOk, L->refPh);   /* that level was the vsync */
+            if (!byIdle && len >= L->maxPrev / 2U) mark(start, L->refOk, L->refPh);   /* that level was the vsync */
         }
     }
     L->start = now;
@@ -124,12 +140,59 @@ static void VSW_IrqCallback(void)
     const uint16_t st = VSW_TMRA->STFLR;
     if (st & TMRA_STFLR_CMPF6) {                                    /* output, PB4, either edge */
         VSW_TMRA->STFLR = (uint16_t)~TMRA_STFLR_CMPF6;      /* 0 clears, 1 keeps: only this flag */
-        out_edge(&s_lvl, now, (CM_GPIO->PIDRB & GPIO_PIN_04) ? 1U : 0U);
+        lvl_edge(&s_lvl, now, (CM_GPIO->PIDRB & GPIO_PIN_04) ? 1U : 0U, out_mark);
     }
     if (st & TMRA_STFLR_CMPF7) {                                    /* source, PB5, falling edge */
         VSW_TMRA->STFLR = (uint16_t)~TMRA_STFLR_CMPF7;      /* 0 clears, 1 keeps: only this flag */
         chan_edge(&s_src, now);
     }
+}
+
+static void dbg_mark(uint32_t at, uint8_t phOk, uint32_t ph)   /* a debug-pin frame: stamp it against both wires */
+{
+    (void)phOk; (void)ph;
+    const uint32_t raw = s_dbg.alive ? at - s_dbg.last : 0U;
+    chan_edge(&s_dbg, at);
+    const uint32_t aS = at - s_src.last, aO = at - s_out.last;
+    const int32_t src = (s_src.alive && aS < CYC_PER_SEC / 39U) ? (int32_t)(aS * 5U) : -1;
+    const int32_t out = (s_out.alive && aO < CYC_PER_SEC / 39U) ? (int32_t)(aO * 5U) : -1;
+    s_dSrc = src; s_dOut = out; s_dFrames++;
+    const uint8_t w = s_dw;
+    s_dring[w].per = raw * 5U; s_dring[w].aSrc = src; s_dring[w].aOut = out;
+    s_dw = (uint8_t)((w + 1U) % DRING);
+}
+
+static void VSW_DbgIrqCallback(void)                          /* debug pin, PB3, both edges */
+{
+    const uint32_t now = DWT->CYCCNT;
+    CM_INTC->EIFCR = EXTINT_CH03;
+    lvl_edge(&s_dlvl, now, (CM_GPIO->PIDRB & GPIO_PIN_03) ? 1U : 0U, dbg_mark);
+}
+
+static void dbg_init(void)
+{
+    CM_GPIO->PSPCR &= (uint16_t)~GPIO_PSPCR_SPFE_2;              /* PB3: JTAG TDO released */
+    stc_gpio_init_t pin;
+    (void)GPIO_StructInit(&pin);
+    pin.u16PinDir = PIN_DIR_IN;
+    pin.u16PullUp = PIN_PU_ON;                                   /* no wire: reads idle, no edges */
+    pin.u16ExtInt = PIN_EXTINT_ON;
+    (void)GPIO_Init(GPIO_PORT_B, GPIO_PIN_03, &pin);
+    stc_extint_init_t ext;
+    (void)EXTINT_StructInit(&ext);
+    ext.u32Filter = EXTINT_FILTER_ON;
+    ext.u32FilterClock = EXTINT_FCLK_DIV1;
+    ext.u32Edge = EXTINT_TRIG_BOTH;
+    (void)EXTINT_Init(EXTINT_CH03, &ext);
+    stc_irq_signin_config_t irq;
+    irq.enIRQn = VSW_DBG_IRQn;
+    irq.enIntSrc = INT_SRC_PORT_EIRQ3;
+    irq.pfnCallback = &VSW_DbgIrqCallback;
+    if (INTC_IrqSignIn(&irq) != LL_OK) return;
+    CM_INTC->EIFCR = EXTINT_CH03;
+    NVIC_SetPriority(VSW_DBG_IRQn, DDL_IRQ_PRIO_04);
+    NVIC_ClearPendingIRQ(VSW_DBG_IRQn);
+    NVIC_EnableIRQ(VSW_DBG_IRQn);
 }
 
 void VSW_Init(void)
@@ -163,6 +226,7 @@ void VSW_Init(void)
     NVIC_ClearPendingIRQ(VSW_IRQn);
     NVIC_EnableIRQ(VSW_IRQn);
     VSW_TMRA->BCSTRL |= TMRA_BCSTRL_START;
+    dbg_init();
     s_on = 1U;
 }
 
@@ -215,9 +279,46 @@ static void chan_age(vsw_chan_t *c)
     __enable_irq();
 }
 
+void VSW_GetDebug(VswDebug *d)
+{
+    d->periodNs = d->minNs = d->maxNs = 0U; d->edges = d->frames = 0U; d->afterSrcNs = d->afterOutNs = -1; d->alive = 0U;
+    if (!s_on) return;
+    __disable_irq();
+    const uint32_t t = DWT->CYCCNT;
+    d->alive = (uint8_t)(s_dbg.alive && t - s_dbg.last < PRESENT_CYC);
+    d->periodNs = mean_ns(&s_dbg, t);
+    if (d->periodNs) {
+        uint32_t mn = 0xFFFFFFFFU, mx = 0U;
+        for (uint8_t i = 0U; i < s_dbg.n; i++) {
+            const uint32_t p = s_dbg.ring[(uint8_t)((s_dbg.w + RING - 1U - i) % RING)];
+            if (p < mn) mn = p;
+            if (p > mx) mx = p;
+        }
+        d->minNs = mn * 5U; d->maxNs = mx * 5U;
+    }
+    d->edges = s_dbg.edges; d->frames = s_dFrames;
+    d->afterSrcNs = s_dSrc; d->afterOutNs = s_dOut;
+    __enable_irq();
+}
+
+void VSW_DebugStream(uint8_t port, uint8_t on)
+{
+    s_dPort = port;
+    s_dr = s_dw;                                               /* start with the next frame */
+    s_dStream = on;
+}
+
 void VSW_Task(void)
 {
     if (!s_on) return;
     chan_age(&s_src);
     chan_age(&s_out);
+    chan_age(&s_dbg);
+    while (s_dStream && s_dr != s_dw) {                         /* the per-frame stream (vd1) */
+        const vsw_dframe_t f = s_dring[s_dr];
+        s_dr = (uint8_t)((s_dr + 1U) % DRING);
+        char b[64];
+        snprintf(b, sizeof(b), "D %lu %ld %ld\r\n", (unsigned long)f.per, (long)f.aSrc, (long)f.aOut);
+        CONSOLE_Write(s_dPort, b);
+    }
 }
