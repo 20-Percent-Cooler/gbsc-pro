@@ -399,15 +399,6 @@ bool advLinkCanListen() {
 bool advLinkChecking() { return platformLinkHardware() && gClient.advController().status == ADV_CONTROLLER_CHECKING; }
 void advLinkSignalPollFast(bool on) { gClient.setSignalFast(on); }
 uint32_t advLinkSignalAtMs() { return gClient.signalAtMs(); }
-void advLinkVsyncWant() { if (platformLinkHardware()) gClient.wantVsync(millis()); }
-bool advLinkVsync(AdvVsync& out, uint32_t maxAgeMs) {
-    const AdvControllerInfo& h = gClient.advController();
-    const AdvVsync* v = gClient.vsync();
-    if (!v || h.status != ADV_CONTROLLER_OK || !(h.info.caps & ADV_INFO_CAP_VSYNC) || millis() - gClient.vsyncAtMs() > maxAgeMs)
-        return false;
-    out = *v;
-    return true;
-}
 const AdvSignal* advLinkSignal() {
     const AdvSignal* g = gClient.signal();
     return g && gClient.advController().status == ADV_CONTROLLER_OK && millis() - gClient.signalAtMs() < 5000 ? g : nullptr;   // > 2 idle polls: one lost reply keeps it

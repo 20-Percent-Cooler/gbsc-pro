@@ -290,9 +290,6 @@ void test_signal_round_trip(void) {
 }
 
 void test_vsync_round_trip(void) {
-    TEST_ASSERT_EQUAL_HEX8(0x4B, ADV_CMD_VSYNC);
-    TEST_ASSERT_EQUAL_HEX8(0x40, ADV_CMD_VSYNC & ADV_WANT_REPLY);    // a request that always wants its reply
-    TEST_ASSERT_EQUAL_HEX8(8, ADV_INFO_CAP_VSYNC);
     AdvVsync a; memset(&a, 0, sizeof(a));
     a.flags = ADV_VS_SRC | ADV_VS_OUT | ADV_VS_PHASE; a.seq = 200;
     a.srcPeriodNs = 16714756; a.outPeriodNs = 16714760; a.phaseNs = 6346000; a.ageMs = 0x1234;   // N64 240p, locked
@@ -306,6 +303,26 @@ void test_vsync_round_trip(void) {
     TEST_ASSERT_EQUAL_UINT32(a.srcPeriodNs, c.srcPeriodNs); TEST_ASSERT_EQUAL_UINT32(a.outPeriodNs, c.outPeriodNs);
     TEST_ASSERT_EQUAL_UINT32(a.phaseNs, c.phaseNs); TEST_ASSERT_EQUAL_UINT16(a.ageMs, c.ageMs);
     TEST_ASSERT_FALSE(advVsyncUnpack(b, sizeof(b) - 1, &c));   // wrong length
+
+    // the I2C frame: 'G' 'V' 1, the payload, a check byte
+    uint8_t f[ADV_VSYNC_FRAME_BYTES];
+    TEST_ASSERT_EQUAL_UINT32(ADV_VSYNC_FRAME_BYTES, advVsyncFramePack(&a, f));
+    TEST_ASSERT_EQUAL_HEX8('G', f[0]); TEST_ASSERT_EQUAL_HEX8('V', f[1]); TEST_ASSERT_EQUAL_HEX8(1, f[2]);
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(want, f + 3, ADV_VSYNC_BYTES);
+    memset(&c, 0, sizeof(c));
+    TEST_ASSERT_TRUE(advVsyncFrameUnpack(f, sizeof(f), &c));
+    TEST_ASSERT_EQUAL_UINT32(a.phaseNs, c.phaseNs); TEST_ASSERT_EQUAL_UINT8(a.seq, c.seq);
+    TEST_ASSERT_FALSE(advVsyncFrameUnpack(f, sizeof(f) - 1, &c));   // short read
+    for (size_t i = 0; i < sizeof(f); i++) {                        // any flipped bit: refused
+        f[i] ^= 0x10;
+        TEST_ASSERT_FALSE(advVsyncFrameUnpack(f, sizeof(f), &c));
+        f[i] ^= 0x10;
+    }
+    uint8_t junk[ADV_VSYNC_FRAME_BYTES];
+    memset(junk, 0xFF, sizeof(junk));                               // nobody drove the bus
+    TEST_ASSERT_FALSE(advVsyncFrameUnpack(junk, sizeof(junk), &c));
+    memset(junk, 0x00, sizeof(junk));
+    TEST_ASSERT_FALSE(advVsyncFrameUnpack(junk, sizeof(junk), &c));
 }
 
 void test_info_version_always_terminated(void) {

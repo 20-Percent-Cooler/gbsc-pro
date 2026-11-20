@@ -187,7 +187,7 @@ static void test_info_reply_reports_applied_state(void) {
     CHECK(!strcmp(i.fw, "3.0.0") && i.buildId == 0xC3A7B74E && i.uptimeS == 42);
     CHECK(i.stateHash == advStateHash(&s) && i.appliedCount == 1);
     CHECK(i.rxFrames == 2);
-    CHECK(i.caps == (ADV_INFO_CAP_SIGNAL | ADV_INFO_CAP_REG_READ | ADV_INFO_CAP_LISTEN | ADV_INFO_CAP_VSYNC));   /* SIGNAL, REG_READ, listen, vsync */
+    CHECK(i.caps == (ADV_INFO_CAP_SIGNAL | ADV_INFO_CAP_REG_READ | ADV_INFO_CAP_LISTEN));   /* SIGNAL, REG_READ, listen */
 }
 
 static void test_signal_reply(void) {
@@ -196,14 +196,6 @@ static void test_signal_reply(void) {
     CHECK(gReplies == 1 && gReplyCmd == 0xC9 && gReplySeq == 9 && gReplyLen == ADV_SIGNAL_BYTES);
     AdvSignal g; CHECK(advSignalUnpack(gReplyPayload, gReplyLen, &g));
     CHECK(g.gen == 3 && g.standard == 4 && g.hz == 50 && (g.flags & ADV_SIG_PRESENT));
-}
-
-static void test_vsync_reply(void) {
-    stubReset(); LINK_Init();
-    poll(1000); poll(2000); request(10, ADV_CMD_VSYNC); LINK_Process();
-    CHECK(gReplies == 1 && gReplyCmd == 0xCB && gReplySeq == 10 && gReplyLen == ADV_VSYNC_BYTES);
-    AdvVsync v; CHECK(advVsyncUnpack(gReplyPayload, gReplyLen, &v));
-    CHECK(v.flags == (ADV_VS_SRC | ADV_VS_OUT | ADV_VS_PHASE) && v.srcPeriodNs == 16714756 && v.phaseNs == 6346000);
 }
 
 static void test_unknown_request_gets_nak(void) {
@@ -610,7 +602,6 @@ int main(void) {
     test_reg_read_map_switch_and_restore();
     test_reg_read_bad_request_status_2();
     test_info_caps_has_reg_read();
-    test_vsync_reply();
     test_first_state_rgbs();
     test_first_state_sv_globals_before_init();
     test_composite_uses_its_format_and_cvbs();

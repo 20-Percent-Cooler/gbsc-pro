@@ -1,5 +1,5 @@
 /* Vsync wires (hardware mod, optional): the TV5725's output vsync and the LM1881's source vsync timed by the HC32, so
- * the ESP's frame lock can read the periods and the phase from the link (ADV_CMD_VSYNC) instead of sampling the
+ * the ESP's frame lock can read the periods and the phase over I2C (i2c_vsync.c) instead of sampling the
  * TV5725 debug pin with the CPU.
  *
  *  Output: VS_OUT at the STV9426's V-SYNC pin (U5 pin 2) -> 1k -> J18 pin 4 = PB4 (JTAG NJTRST, released)

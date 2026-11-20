@@ -12,10 +12,6 @@ const AdvControllerInfo& advLinkController();                         // ADV Con
 const AdvSignal* advLinkSignal();                      // SIGNAL report less than 5 s old, else nullptr
 uint32_t advLinkSignalAtMs();                          // millis() of the last SIGNAL report (newer than an input switch?)
 void advLinkSignalPollFast(bool on);                   // auto input scan: poll SIGNAL every 500 ms
-// Vsync wires of a modded board (ADV_CMD_VSYNC): frame lock asks at every measurement (a 4 s polling lease, 250 ms
-// apart) and reads the last reply when it is less than maxAgeMs old and from an ADV Controller with the capability
-void advLinkVsyncWant();
-bool advLinkVsync(AdvVsync& out, uint32_t maxAgeMs);
 // Input search identification: the decoder listens on pin 20 while the TV5725 stays on RGB SCART
 void advLinkSetListen(bool on);                        // STATE at once on a change (RGB SCART only, adv-state.cpp)
 bool advLinkListenRequested();

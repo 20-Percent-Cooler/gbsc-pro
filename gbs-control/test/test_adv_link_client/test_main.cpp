@@ -292,49 +292,6 @@ void test_info_after_state_comes_before_signal(void) {
     gCaps = 0;
 }
 
-// Vsync wires: polled only while frame lock holds a lease, 250 ms apart, one try, and only with the capability
-static const uint8_t VSYNC = ADV_CMD_VSYNC;
-static void vsyncReply(AdvLinkClient& c, uint32_t now, uint32_t srcNs) {
-    AdvVsync v; memset(&v, 0, sizeof(v));
-    v.flags = ADV_VS_SRC | ADV_VS_OUT | ADV_VS_PHASE; v.srcPeriodNs = srcNs; v.outPeriodNs = srcNs; v.phaseNs = 4000000;
-    uint8_t b[ADV_VSYNC_BYTES]; advVsyncPack(&v, b);
-    c.result(VSYNC, true, ADV_CMD_VSYNC | ADV_RESP, b, ADV_VSYNC_BYTES, now);
-}
-
-void test_vsync_only_during_a_lease(void) {
-    gCaps = ADV_INFO_CAP_VSYNC;
-    AdvLinkClient c;
-    uint32_t t = bootOk(c) + 60;
-    for (uint32_t e = t; e < t + 3000; e += 10) TEST_ASSERT_EQUAL_HEX8(0, c.due(e, true, true));   // no lease: nothing
-    t += 3000;
-    c.wantVsync(t);
-    TEST_ASSERT_EQUAL_HEX8(VSYNC, c.due(t, true, true));
-    vsyncReply(c, t, 16714756);
-    TEST_ASSERT_NOT_NULL(c.vsync());
-    TEST_ASSERT_EQUAL_UINT32(16714756, c.vsync()->srcPeriodNs);
-    TEST_ASSERT_EQUAL_UINT32(t, c.vsyncAtMs());
-    TEST_ASSERT_EQUAL_HEX8(0, c.due(t + 200, true, true));
-    TEST_ASSERT_EQUAL_HEX8(VSYNC, c.due(t + 250, true, true));
-    c.result(VSYNC, false, 0, nullptr, 0, t + 250);              // lost: no retry, status kept
-    TEST_ASSERT_EQUAL_HEX8(0, c.due(t + 350, true, true));
-    TEST_ASSERT_EQUAL_UINT8(ADV_CONTROLLER_OK, c.advController().status);
-    for (uint32_t e = t + 500; e < t + AdvLinkClient::kVsyncLeaseMs; e += 10) {   // only VSYNC while the lease runs
-        uint8_t r = c.due(e, true, true);
-        if (r) { TEST_ASSERT_EQUAL_HEX8(VSYNC, r); c.result(r, false, 0, nullptr, 0, e); }
-    }
-    TEST_ASSERT_EQUAL_HEX8(0, c.due(t + AdvLinkClient::kVsyncLeaseMs + 10, true, true));   // the lease ran out
-    gCaps = 0;
-}
-
-void test_vsync_needs_the_capability(void) {
-    gCaps = ADV_INFO_CAP_SIGNAL;
-    AdvLinkClient c;
-    uint32_t t = bootOk(c) + 60;
-    c.wantVsync(t);
-    TEST_ASSERT_EQUAL_HEX8(SIGNAL, c.due(t, true, true));        // SIGNAL only: no VSYNC without the cap
-    gCaps = 0;
-}
-
 void test_restart_forgets_the_signal(void) {   // after an ADV Controller update: no report from the old firmware
     gCaps = ADV_INFO_CAP_SIGNAL;
     AdvLinkClient c;
@@ -551,8 +508,6 @@ int main(int, char**) {
     RUN_TEST(test_no_reply_notice_only_once);
     RUN_TEST(test_keep_alive_state_does_not_trigger_info);
     RUN_TEST(test_no_signal_requests_without_caps);
-    RUN_TEST(test_vsync_only_during_a_lease);
-    RUN_TEST(test_vsync_needs_the_capability);
     RUN_TEST(test_signal_polled_every_500_ms_while_powered);
     RUN_TEST(test_signal_slow_when_decoder_off);
     RUN_TEST(test_signal_fast_while_scanning);

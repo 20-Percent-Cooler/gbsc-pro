@@ -1,6 +1,7 @@
 #include "main.h"
 #include "debug_uart.h"
 #include "vsync_wires.h"
+#include "i2c_vsync.h"
 #include "console_hc32.h"
 #include "usb_console.h"
 
@@ -91,7 +92,8 @@ int main(void)
     TMR0_Start(CM_TMR0_2, TMR0_CHA);
     UART_DMA_Init();
     DebugUart_Init();
-    VSW_Init();                                 /* vsync wires (modded boards; ADV_CMD_VSYNC) */
+    VSW_Init();                                 /* vsync wires (modded boards) */
+    I2CV_Init();                                /* ... read by the ESP over I2C (J17 mod; idle without it) */
 
     printf("\r\n[SYSTEM] ADV Controller ready\r\n");
 
@@ -104,6 +106,7 @@ int main(void)
     {
         LINK_Poll();   /* frames from the ESP: STATE diff applied at once */
         VSW_Task();    /* ages the vsync wire timestamps */
+        I2CV_Task(g_u32_ms);   /* the frame the ESP reads over I2C */
 
         if (g_u16_sys_timer >= SYS_TIMEOUT_50MS)
         {

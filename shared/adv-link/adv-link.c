@@ -259,6 +259,25 @@ int advVsyncUnpack(const uint8_t* in, size_t n, AdvVsync* v) {
     return 1;
 }
 
+static uint8_t vsyncCheck(const uint8_t* f) {   /* not 0x00/0xFF for an all-0xFF or all-0x00 bus read */
+    uint8_t c = 0x5A;
+    for (size_t i = 0; i < ADV_VSYNC_FRAME_BYTES - 1; i++) c = (uint8_t)((c << 1 | c >> 7) ^ f[i]);
+    return c;
+}
+
+size_t advVsyncFramePack(const AdvVsync* v, uint8_t* out) {
+    out[0] = 'G'; out[1] = 'V'; out[2] = 1;
+    advVsyncPack(v, out + 3);
+    out[ADV_VSYNC_FRAME_BYTES - 1] = vsyncCheck(out);
+    return ADV_VSYNC_FRAME_BYTES;
+}
+
+int advVsyncFrameUnpack(const uint8_t* in, size_t n, AdvVsync* v) {
+    if (n != ADV_VSYNC_FRAME_BYTES || in[0] != 'G' || in[1] != 'V' || in[2] != 1) return 0;
+    if (in[ADV_VSYNC_FRAME_BYTES - 1] != vsyncCheck(in)) return 0;
+    return advVsyncUnpack(in + 3, ADV_VSYNC_BYTES, v);
+}
+
 /* ---- update payloads ---- */
 
 uint32_t advCrc32Update(uint32_t crc, const uint8_t* p, size_t n) {

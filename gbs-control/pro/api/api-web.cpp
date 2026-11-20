@@ -10,6 +10,7 @@
 #include "api-actions.h"
 #include "api-backup.h"
 #include "../adv/adv-store-web.h"
+#include "../link/vsync-i2c.h"
 #include "../link/adv-link-device.h"
 #include "../link/adv-controller-format.h"
 #include "../gbs-control-pro.h"
@@ -434,11 +435,12 @@ void apiWebLogTick(uint32_t now) {
 void apiInfoGet(AsyncWebServerRequest* req, uint8_t) {
     if (req->hasArg("reset_net")) netStatsReset();   // diagnostics: start a new measurement window
     const PlatformProbes& p = platformProbes();
+    const VsyncI2cStats vs = vsyncI2cStats();   // the J17 mod: the ADV Controller's vsync wires over I2C
     char ssid[72]; jsonEscape(WiFi.SSID().c_str(), ssid, sizeof(ssid));
     bool ap = WiFi.getMode() == WIFI_AP;
     String ip = ap ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
     // heap, only while the reply is built (no static buffer); the format string lives in flash
-    const size_t kJson = 2150;   // worst case ~1950: advController + signal 511 (ADV_CONTROLLER_JSON_MAX), ssid 71, crash ~250, update ~220
+    const size_t kJson = 2230;   // worst case ~2030 (0x32 probe +80): advController + signal 511 (ADV_CONTROLLER_JSON_MAX), ssid 71, crash ~250, update ~220
     char* json = (char*)malloc(kJson + ADV_CONTROLLER_JSON_MAX);
     if (!json) { sendJson(req, 503, F("{\"error\":\"memory\"}")); return; }
     char* advController = json + kJson;   // one allocation; the network context stack stays small
@@ -448,7 +450,7 @@ void apiInfoGet(AsyncWebServerRequest* req, uint8_t) {
         snprintf_P(advController, ADV_CONTROLLER_JSON_MAX, PSTR("{\"status\":\"error\"}"));
     int w = snprintf_P(json, kJson, PSTR(
         "{\"api\":1,\"safe_mode\":%s,\"fw\":\"%s\",\"marker\":\"%s\",\"build\":\"%s\",\"board\":\"%s\",\"caps\":%u,"
-        "\"probes\":{\"0x5D\":{\"ack\":%u,\"tries\":%u},\"0x44\":{\"ack\":%u,\"tries\":%u},\"0x3C\":{\"ack\":%u,\"tries\":%u},\"rounds\":%u,\"bus\":%u},"
+        "\"probes\":{\"0x5D\":{\"ack\":%u,\"tries\":%u},\"0x44\":{\"ack\":%u,\"tries\":%u},\"0x3C\":{\"ack\":%u,\"tries\":%u},\"0x32\":{\"ack\":%u,\"now\":%u,\"probes\":%lu,\"reads\":%lu,\"fails\":%lu},\"rounds\":%u,\"bus\":%u},"
         "\"heap\":%u,\"max_block\":%u,\"wifi\":{\"mode\":\"%s\",\"ip\":\"%s\",\"ssid\":\"%s\",\"sleep\":%u,\"rssi\":%d,\"channel\":%d,\"slow\":%u},"
         "\"adv_controller\":%s,"
         "\"net\":{\"heap_min\":%u,\"block_min\":%u,\"tcp\":%u,\"tcp_max\":%u,\"tw\":%u,\"tw_max\":%u,"
@@ -457,7 +459,9 @@ void apiInfoGet(AsyncWebServerRequest* req, uint8_t) {
         "\"input\":{\"choice\":%u,\"active\":%u,\"last\":%u,\"state\":\"%s\",\"termination\":%s},"
         "\"signal\":"),
         safeModeActive() ? "true" : "false", GBS_FW_FULL_VERSION, GBS_FW_VERSION_MARKER, kBuildId, platformBoardName(), platformCaps(),
-        p.stv.ack, p.stv.attempts, p.pt.ack, p.pt.attempts, p.oled.ack, p.oled.attempts, platformProbeRounds(), platformBusAtBoot(),
+        p.stv.ack, p.stv.attempts, p.pt.ack, p.pt.attempts, p.oled.ack, p.oled.attempts,
+        p.advI2c.ack, vs.present ? 1u : 0u, (unsigned long)vs.probes, (unsigned long)vs.reads, (unsigned long)vs.fails,
+        platformProbeRounds(), platformBusAtBoot(),
         ESP.getFreeHeap(), ESP.getMaxFreeBlockSize(), ap ? "ap" : "sta", ip.c_str(), ap ? "" : ssid,
         (unsigned)WiFi.getSleepMode(),   // 0 none, 1 light, 2 modem
         ap ? 0 : (int)WiFi.RSSI(), (int)channelGuardChannel(),   // channel: EMI investigation (1080p output vs Wi-Fi)

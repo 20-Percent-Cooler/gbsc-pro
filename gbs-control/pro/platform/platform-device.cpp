@@ -47,6 +47,10 @@ static void probeAll() {
     gProbes.stv = probe(0x5D);
     gProbes.pt = probe(0x44);
     gProbes.oled = probe(0x3C);
+    // one try: on boards without the J17 mod nothing answers, and the HC32 can still be starting (vsync-i2c.cpp
+    // probes again later)
+    Wire.beginTransmission(0x32);
+    gProbes.advI2c = {Wire.endTransmission() == 0, 1};
 }
 
 // Up to 5 rounds ~200 ms apart until a Pro chip answers (a standard board pays ~1 s at boot, with or without

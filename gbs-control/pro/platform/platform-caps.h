@@ -7,7 +7,9 @@
 enum : uint8_t { BOARD_AUTO = 0, BOARD_PRO = 1, BOARD_ORIGINAL = 2 };
 
 struct ProbeResult { bool ack; uint8_t attempts; };
-struct PlatformProbes { ProbeResult stv; ProbeResult pt; ProbeResult oled; };
+// advI2c: the ADV Controller's HC32 at 0x32 on this bus (the J17 mod): vsync wires over I2C (pro/link/vsync-i2c.h).
+// Informational: it doesn't change the caps.
+struct PlatformProbes { ProbeResult stv; ProbeResult pt; ProbeResult oled; ProbeResult advI2c; };
 
 // Pro when the STV9426 or the PT2257 answers (two chips: one failed chip does not demote a Pro)
 uint8_t platformCapsFrom(const PlatformProbes& p, uint8_t board);

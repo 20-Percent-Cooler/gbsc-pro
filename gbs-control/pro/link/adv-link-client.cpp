@@ -3,8 +3,7 @@
 
 static const uint8_t kPing = ADV_CMD_PING | ADV_WANT_REPLY, kInfo = ADV_CMD_INFO | ADV_WANT_REPLY,
                      kSignal = ADV_CMD_SIGNAL,   // 0x49 has the reply bit
-                     kRegRead = ADV_CMD_REG_READ, // 0x4A too
-                     kVsync = ADV_CMD_VSYNC;      // 0x4B too
+                     kRegRead = ADV_CMD_REG_READ; // 0x4A too
 
 uint8_t AdvLinkClient::start(uint8_t cmd, uint32_t now) {
     pending_ = cmd;
@@ -40,15 +39,8 @@ uint8_t AdvLinkClient::due(uint32_t now, bool requestAllowed, bool linkFree) {
                 if (!(info_.info.caps & ADV_INFO_CAP_REG_READ)) { regRead_.state = ADV_REG_UNSUPPORTED; return 0; }
                 return start(kRegRead, now);
             }
-            if (info_.status != ADV_CONTROLLER_OK) return 0;
-            // VSYNC: only during a lease (frame lock measuring) and from an ADV Controller that announces it
-            if (vsyncLease_ && (int32_t)(now - vsyncUntil_) >= 0) vsyncLease_ = false;
-            if (vsyncLease_ && (info_.info.caps & ADV_INFO_CAP_VSYNC) && now - lastVsync_ >= kVsyncPeriodMs) {
-                lastVsync_ = now;
-                return start(kVsync, now);
-            }
             // SIGNAL: only an ADV Controller that announces it; often while the decoder is powered (S-Video/Composite)
-            if (!(info_.info.caps & ADV_INFO_CAP_SIGNAL)) return 0;
+            if (info_.status != ADV_CONTROLLER_OK || !(info_.info.caps & ADV_INFO_CAP_SIGNAL)) return 0;
             uint32_t every = signalFast_ || (haveSignal_ && (signal_.flags & ADV_SIG_POWERED)) ? kSignalPeriodMs : kSignalIdlePeriodMs;
             if (signalStarted_ && haveSignal_ && now - lastSignal_ < every) return 0;
             if (signalStarted_ && !haveSignal_ && now - lastSignal_ < (signalFast_ ? kSignalPeriodMs : kSignalIdlePeriodMs)) return 0;
@@ -91,12 +83,6 @@ void AdvLinkClient::result(uint8_t req, bool got, uint8_t cmd, const uint8_t* pa
         if (tries_ < kTries) return;                  // retried by due() after the spacing
         regRead_.why = ADV_REG_WHY_NO_REPLY;
         finishRegRead(ADV_REG_ERROR);
-        return;
-    }
-    if (req == kVsync) {                              // one try, like SIGNAL: the next poll comes soon
-        pending_ = 0;
-        AdvVsync v;
-        if (ok && advVsyncUnpack(payload, len, &v)) { vsync_ = v; haveVsync_ = true; vsyncAt_ = now; }
         return;
     }
     if (req == kSignal) {                             // one try; a lost reply never counts towards NO_REPLY

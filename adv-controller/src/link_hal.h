@@ -40,7 +40,6 @@ uint32_t halTimeUs(void);                 /* free-running, 10 us resolution, wra
 uint32_t halReply(const uint8_t* frame, uint8_t n, uint32_t notBeforeUs, uint32_t deadlineUs);
 void halInfo(AdvInfo* out);               /* fw, build id, status flags, standard, uptime */
 void halSignal(AdvSignal* out);           /* v4 signal report (signal.c) */
-void halVsync(AdvVsync* out);             /* vsync wires (vsync_wires.c); flags 0 without them */
 
 /* Firmware update: staging area 0x40000-0x6FFFF, 24 sectors of 8 KB */
 #define LINK_STAGING_SIZE   0x30000UL

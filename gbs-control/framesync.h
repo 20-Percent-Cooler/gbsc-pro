@@ -18,6 +18,7 @@
 #include <ESP8266WiFi.h>
 #include "pro/input/input-types.h"
 #include "pro/link/adv-link-device.h"
+#include "pro/link/vsync-i2c.h"
 
 // FS_DEBUG:      full verbose debug over serial
 // FS_DEBUG_LED:  just blink LED (off = adjust phase, on = normal phase)
@@ -110,7 +111,7 @@ private:
     /// Reset with syncLastCorrection.
     static float maybeFreqExt_per_videoFps;
 
-    // Vsync wires (modded board: J18 pins 4 and 3, ADV_CMD_VSYNC). The ADV Controller times the output vsync and the
+    // Vsync wires (modded board: J18 pins 4 and 3, read over I2C with the J17 mod). The ADV Controller times the output vsync and the
     // LM1881's source vsync; the debug pin then only measures once per reset(), for the constant between the wires'
     // phase and the pin's (VS_OUT vs the VDS vblank, the LM1881 vs the IF vsync: a fixed delay per mode).
     static bool wireCalNeeded;       // reset(): the next wire reading also measures the pin
@@ -121,10 +122,9 @@ private:
     // follows the RGB SCART / RGB SoG sync; on the other inputs it sees another line)
     static bool wireSample(int32_t *periodInput, int32_t *periodOutput, int32_t *phase)
     {
-        advLinkVsyncWant();   // keeps the ADV link polling while frame lock measures
         if (uopt->activeInputType != InputTypeRGBs && uopt->activeInputType != InputTypeRGsB) return false;
         AdvVsync v;
-        if (!advLinkVsync(v, 600)) return false;
+        if (!vsyncI2cRead(v)) return false;   // no J17 mod, or no valid reply: the debug pin
         const uint8_t all = ADV_VS_SRC | ADV_VS_OUT | ADV_VS_PHASE;
         if ((v.flags & all) != all) return false;
         const uint32_t src = v.srcPeriodNs, out = v.outPeriodNs;
