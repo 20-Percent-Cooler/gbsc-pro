@@ -20,9 +20,10 @@ static bool probeAddr(uint8_t a) {
 }
 
 // The vsync-pico add-on (0x33: the TV5725's own vsync, every input) before the ADV Controller (0x32, the J17 mod)
+// (a standard board has no ADV Controller: only the add-on)
 static bool probeNow() {
     if (probeAddr(VSYNC_PICO_I2C_ADDR)) { gAddr = VSYNC_PICO_I2C_ADDR; return true; }
-    if (probeAddr(ADV_VSYNC_I2C_ADDR)) { gAddr = ADV_VSYNC_I2C_ADDR; return true; }
+    if (hwHas(CAP_ADV) && probeAddr(ADV_VSYNC_I2C_ADDR)) { gAddr = ADV_VSYNC_I2C_ADDR; return true; }
     return false;
 }
 
@@ -32,13 +33,12 @@ static void logFound() {
 }
 
 bool vsyncI2cPresent() {
-    if (!hwHas(CAP_ADV)) return false;   // a standard board: no ADV Controller
     const uint32_t now = millis();
     if (!gInit) {
         gInit = true;
         gPresent = probeAddr(VSYNC_PICO_I2C_ADDR);
         if (gPresent) gAddr = VSYNC_PICO_I2C_ADDR;
-        else { gPresent = platformProbes().advI2c.ack; gAddr = ADV_VSYNC_I2C_ADDR; }
+        else if (hwHas(CAP_ADV)) { gPresent = platformProbes().advI2c.ack; gAddr = ADV_VSYNC_I2C_ADDR; }
         gProbeAt = now;
         if (gPresent) logFound();
     }
