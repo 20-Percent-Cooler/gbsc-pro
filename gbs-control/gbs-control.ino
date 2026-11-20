@@ -9134,9 +9134,11 @@ void loop()
 }
     loopWatchMark(LW_COMMANDS);
 
-    // run FrameTimeLock if enabled
+    // run FrameTimeLock if enabled. With the clock generator, wait for the clock/FPS mapping too: a clock gen reset
+    // (input change, preset load) clears it until the preset's clock sync, and a run before that only logged an error
     if (uopt->enableFrameTimeLock && rto->sourceDisconnected == false && rto->autoBestHtotalEnabled &&
-        rto->syncWatcherEnabled && FrameSync::ready() && millis() - lastVsyncLock > FrameSyncAttrs::lockInterval && rto->continousStableCounter > 20 && rto->noSyncCounter == 0)
+        rto->syncWatcherEnabled && (rto->extClockGenDetected ? FrameSync::frequencyReady() : FrameSync::ready()) &&
+        millis() - lastVsyncLock > FrameSyncAttrs::lockInterval && rto->continousStableCounter > 20 && rto->noSyncCounter == 0)
     {
         uint16_t htotal = GBS::STATUS_SYNC_PROC_HTOTAL::read();
         uint16_t pllad = GBS::PLLAD_MD::read();
