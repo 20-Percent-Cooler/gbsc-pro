@@ -220,13 +220,19 @@ static void answer(const AdvParser* p) {
         halSignal(&g);
         advSignalPack(&g, b);
         reply(p->seq, (uint8_t)(p->cmd | ADV_RESP), b, ADV_SIGNAL_BYTES);
+    } else if (base == ADV_CMD_BASE(ADV_CMD_VSYNC)) {
+        AdvVsync v;
+        uint8_t b[ADV_VSYNC_BYTES];
+        halVsync(&v);
+        advVsyncPack(&v, b);
+        reply(p->seq, (uint8_t)(p->cmd | ADV_RESP), b, ADV_VSYNC_BYTES);
     } else if (base == ADV_CMD_BASE(ADV_CMD_INFO)) {
         AdvInfo i;
         uint8_t b[ADV_INFO_BYTES];
         halInfo(&i);
         i.protocol = ADV_PROTOCOL;
         i.stateVersion = ADV_STATE_VERSION;
-        i.caps = ADV_INFO_CAP_SIGNAL | ADV_INFO_CAP_REG_READ | ADV_INFO_CAP_LISTEN;
+        i.caps = ADV_INFO_CAP_SIGNAL | ADV_INFO_CAP_REG_READ | ADV_INFO_CAP_LISTEN | ADV_INFO_CAP_VSYNC;
         i.rxFrames = sRxFrames;
         i.badFrames = LINK_BadFrames();
         i.appliedCount = sApplied;

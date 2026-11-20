@@ -3,6 +3,7 @@
 #include "main.h"
 #include "link_hal.h"
 #include "signal.h"
+#include "vsync_wires.h"
 #include "fault_handler.h"   /* WDT_Refresh */
 
 void halLoadGlobals(const AdvRegs* r)
@@ -79,3 +80,4 @@ int halI2cRead(uint8_t addr, uint8_t reg, uint8_t* v, uint8_t n)
 
 
 void halSignal(AdvSignal* out) { SIG_Get(out, ADV_Regs()->formatReg, ENC_Mode(), Input_signal); }
+void halVsync(AdvVsync* out) { VSW_Get(out); }

@@ -47,6 +47,7 @@ C_SOURCES = \
     $(SRC_DIR)/board.c \
     $(SRC_DIR)/led.c \
     $(SRC_DIR)/signal.c \
+    $(SRC_DIR)/vsync_wires.c \
     $(SRC_DIR)/debug_uart.c \
     $(SRC_DIR)/console.c \
     $(SRC_DIR)/console_hc32.c \

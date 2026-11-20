@@ -51,6 +51,11 @@ void halSignal(AdvSignal* out) {
     memset(out, 0, sizeof(*out));
     out->gen = 3; out->flags = ADV_SIG_PRESENT | ADV_SIG_LOCK | ADV_SIG_POWERED; out->standard = 4; out->hz = 50;
 }
+void halVsync(AdvVsync* out) {
+    memset(out, 0, sizeof(*out));
+    out->flags = ADV_VS_SRC | ADV_VS_OUT | ADV_VS_PHASE; out->seq = 5;
+    out->srcPeriodNs = 16714756; out->outPeriodNs = 16714760; out->phaseNs = 6346000; out->ageMs = 3;
+}
 uint8_t gStaging[LINK_STAGING_SIZE];
 int gProgramFail;
 int halStagingErase(uint8_t sector) {

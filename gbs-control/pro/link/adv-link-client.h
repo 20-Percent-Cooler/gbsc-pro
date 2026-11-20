@@ -41,6 +41,11 @@ public:
     const AdvSignal* signal() const { return haveSignal_ ? &signal_ : nullptr; }
     uint32_t signalAtMs() const { return signalAt_; }
     void setSignalFast(bool on) { signalFast_ = on; }   // auto input scan: SIGNAL every 500 ms even with the decoder off
+    // Vsync wires (ADV_INFO_CAP_VSYNC): VSYNC every kVsyncPeriodMs while a lease runs (frame lock renews it at every
+    // measurement), never otherwise; the last reply and when it came
+    void wantVsync(uint32_t nowMs) { vsyncUntil_ = nowMs + kVsyncLeaseMs; vsyncLease_ = true; }
+    const AdvVsync* vsync() const { return haveVsync_ ? &vsync_ : nullptr; }
+    uint32_t vsyncAtMs() const { return vsyncAt_; }
     // A new read replaces one not sent yet (one on the wire finishes first); gen: the caller's id for the result
     void requestRegRead(uint8_t dev, uint8_t map, uint8_t reg, uint8_t count, uint8_t gen);
     const AdvRegRead& regRead() const { return regRead_; }
@@ -51,7 +56,8 @@ public:
 
     static const uint32_t kSilenceMs = 50, kTrySpacingMs = 100, kBootPingEveryMs = 200, kBootWindowMs = 2000,
                           kInfoAfterStateMs = 50, kInfoPeriodMs = 10000, kIncompatiblePeriodMs = 30000,
-                          kSlowPingMs = 15000, kSignalPeriodMs = 500, kSignalIdlePeriodMs = 2000;
+                          kSlowPingMs = 15000, kSignalPeriodMs = 500, kSignalIdlePeriodMs = 2000,
+                          kVsyncPeriodMs = 250, kVsyncLeaseMs = 4000;
     static const uint8_t kTries = 3, kBootMinTries = 8, kFailedCycles = 3, kMaxResends = 3;
 
 private:
@@ -68,6 +74,9 @@ private:
     bool haveSignal_ = false;
     uint32_t lastSignal_ = 0, signalAt_ = 0;
     bool signalStarted_ = false;
+    AdvVsync vsync_ = {};
+    bool haveVsync_ = false, vsyncLease_ = false;
+    uint32_t vsyncUntil_ = 0, lastVsync_ = 0, vsyncAt_ = 0;
     AdvRegRead regRead_ = {};
     AdvRegRead nextRead_ = {};                       // asked while one was on the wire: sent after it
     bool haveNext_ = false;

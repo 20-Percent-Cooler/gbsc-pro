@@ -242,6 +242,23 @@ int advSignalUnpack(const uint8_t* in, size_t n, AdvSignal* s) {
     return 1;
 }
 
+
+size_t advVsyncPack(const AdvVsync* v, uint8_t* out) {
+    memset(out, 0, ADV_VSYNC_BYTES);
+    out[0] = v->flags; out[1] = v->seq;
+    put32(out + 2, v->srcPeriodNs); put32(out + 6, v->outPeriodNs); put32(out + 10, v->phaseNs);
+    put16(out + 14, v->ageMs);
+    return ADV_VSYNC_BYTES;
+}
+
+int advVsyncUnpack(const uint8_t* in, size_t n, AdvVsync* v) {
+    if (n != ADV_VSYNC_BYTES) return 0;
+    v->flags = in[0]; v->seq = in[1];
+    v->srcPeriodNs = get32(in + 2); v->outPeriodNs = get32(in + 6); v->phaseNs = get32(in + 10);
+    v->ageMs = get16(in + 14);
+    return 1;
+}
+
 /* ---- update payloads ---- */
 
 uint32_t advCrc32Update(uint32_t crc, const uint8_t* p, size_t n) {

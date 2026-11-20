@@ -18,7 +18,7 @@ extern "C" {
 enum {
     ADV_CMD_STATE = 0x01, ADV_CMD_I2C_BATCH = 0x02,
     ADV_CMD_INFO = 0x43, ADV_CMD_UPD_BEGIN = 0x44, ADV_CMD_UPD_DATA = 0x45, ADV_CMD_UPD_COMMIT = 0x46,
-    ADV_CMD_PING = 0x47, ADV_CMD_UPD_STATUS = 0x48, ADV_CMD_SIGNAL = 0x49, ADV_CMD_REG_READ = 0x4A, ADV_CMD_NAK = 0xFF,
+    ADV_CMD_PING = 0x47, ADV_CMD_UPD_STATUS = 0x48, ADV_CMD_SIGNAL = 0x49, ADV_CMD_REG_READ = 0x4A, ADV_CMD_VSYNC = 0x4B, ADV_CMD_NAK = 0xFF,
     ADV_RESP = 0x80,         /* response bit (ADV Controller -> ESP) */
     ADV_WANT_REPLY = 0x40    /* request bit: a reply is expected */
 };
@@ -96,7 +96,8 @@ enum { ADV_INFO_LOCK = 1, ADV_INFO_FSC_LOCK = 2, ADV_INFO_ADV_PRESENT = 4, ADV_I
 #define ADV_INFO_BYTES 36        /* 30 used + 6 reserved, little-endian, field by field */
 enum { ADV_INFO_CAP_SIGNAL = 1,     /* the ADV Controller answers ADV_CMD_SIGNAL */
        ADV_INFO_CAP_REG_READ = 2,    /* ... and ADV_CMD_REG_READ */
-       ADV_INFO_CAP_LISTEN = 4 };    /* ... and AdvState.listen */
+       ADV_INFO_CAP_LISTEN = 4,      /* ... and AdvState.listen */
+       ADV_INFO_CAP_VSYNC = 8 };     /* ... and ADV_CMD_VSYNC (the vsync wires of a modded board) */
 size_t advInfoPack(const AdvInfo* i, uint8_t* out);
 int advInfoUnpack(const uint8_t* in, size_t n, AdvInfo* i);
 
@@ -126,6 +127,27 @@ typedef struct {
 } AdvSignal;
 size_t advSignalPack(const AdvSignal* s, uint8_t* out);
 int advSignalUnpack(const uint8_t* in, size_t n, AdvSignal* s);
+
+/* ---- vsync wires: reply to ADV_CMD_VSYNC ----
+ * Hardware mod: the TV5725's output vsync (VS_OUT, at the STV9426's V-SYNC pin) -> 1k -> J18 pin 4 (PB4) and the
+ * LM1881's VSOUT -> 1k -> J18 pin 3 (PB5). The ADV Controller times both with its 200 MHz cycle counter. Periods are
+ * means over the last second (sources: two fields averaged, 240p/480i field pairs alternate in length); the phase is
+ * the output vsync's start after the source vsync's start, at the latest output vsync, ageMs before the reply.
+ * Without the wires the flags stay 0. Little-endian. */
+#define ADV_VSYNC_BYTES 16
+enum { ADV_VS_SRC = 0x01,      /* source vsync in the last 100 ms */
+       ADV_VS_OUT = 0x02,      /* output vsync in the last 100 ms */
+       ADV_VS_PHASE = 0x04 };  /* both running: the phase is current */
+typedef struct {
+    uint8_t flags;             /* ADV_VS_* */
+    uint8_t seq;               /* +1 per output vsync, wraps */
+    uint32_t srcPeriodNs;      /* 0: none in the last second */
+    uint32_t outPeriodNs;
+    uint32_t phaseNs;
+    uint16_t ageMs;
+} AdvVsync;
+size_t advVsyncPack(const AdvVsync* v, uint8_t* out);
+int advVsyncUnpack(const uint8_t* in, size_t n, AdvVsync* v);
 
 /* ---- register read: ADV_CMD_REG_READ request and reply ----
  * Request: dev (8-bit write address: 0x42 ADV7280, 0x56 ADV7391, 0x84 ADV7280 VPP), map (0 none; 0x20 interrupt/VDP
