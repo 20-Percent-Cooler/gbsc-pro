@@ -60,6 +60,7 @@ extern bool gSettingsPresetPending;   // pro/settings/settings-apply.cpp: preset
 #include "pro/input/rgb-scart-judge.h"
 #include "pro/picture/picture-color.h"
 #include "pro/picture/rgb-levels.h"
+#include "pro/link/vsync-i2c.h"
 
 #include "OSDManager.h"
 OSDManager osdManager;   // the TV5725's own icon OSD (upstream gbs-control): standard boards
@@ -8178,6 +8179,7 @@ void loop()
     logLoop();         // console log: pending upstream text, sync marks summary
     apiLoop();         // web changes and actions, applied outside the network context
     rgbLevelsLoop();    // RGB levels: one look per pass while a level is being set
+    vsyncI2cPresent();  // the J17 mod: probes 0x32 every 5 s until the ADV Controller answers (vsync wires over I2C)
     // No signal: give the WiFi stack time at every pass. Measured (Mega Drive off, channel 8): without it
     // ping lost 16-60 % and HTTP took 0.5-15 s; with 1 ms both match the picture's (0 %, ~40 ms). The source checks
     // run on millis() (every 500 ms), so the pause does not slow the search.

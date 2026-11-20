@@ -31,6 +31,9 @@ static volatile uint8_t s_txi;            /* next byte of the current read; 0 = 
 static volatile uint32_t s_reads;         /* reads started (console / tests) */
 static uint32_t s_lastMs;
 static uint8_t s_on;
+static uint32_t s_stuckSince;            /* ms + 1 when SDA was first seen held low with SCL idle; 0 = not */
+static uint32_t s_unsticks;              /* peripheral restarts by the stuck-bus check */
+#define I2CV_STUCK_MS  (20U)
 
 static void I2CV_RxIrq(void)               /* a written byte: not used */
 {
@@ -68,6 +71,22 @@ static int32_t signIn(IRQn_Type irqn, en_int_src_t src, func_ptr_t cb)
     return LL_OK;
 }
 
+static int32_t periphInit(void)
+{
+    I2C_DeInit(I2CV_UNIT);
+    stc_i2c_init_t cfg;
+    float32_t err;
+    (void)I2C_StructInit(&cfg);
+    cfg.u32ClockDiv = I2C_CLK_DIV4;
+    cfg.u32Baudrate = 400000UL;   /* the slave follows the master's clock; this sets the filters' timing */
+    cfg.u32SclTime = 3UL;
+    if (I2C_Init(I2CV_UNIT, &cfg, &err) != LL_OK) return LL_ERR;
+    I2C_SlaveAddrConfig(I2CV_UNIT, I2C_ADDR0, I2C_ADDR_7BIT, ADV_VSYNC_I2C_ADDR);
+    I2C_IntCmd(I2CV_UNIT, I2C_INT_RX_FULL | I2C_INT_TX_EMPTY | I2C_INT_STOP | I2C_INT_NACK, ENABLE);
+    I2C_Cmd(I2CV_UNIT, ENABLE);
+    return LL_OK;
+}
+
 void I2CV_Init(void)
 {
     AdvVsync v;
@@ -78,27 +97,68 @@ void I2CV_Init(void)
     GPIO_SetFunc(I2CV_SCL_PORT, I2CV_SCL_PIN, I2CV_SCL_FUNC);
     GPIO_SetFunc(I2CV_SDA_PORT, I2CV_SDA_PIN, I2CV_SDA_FUNC);
     FCG_Fcg1PeriphClockCmd(I2CV_FCG, ENABLE);
-    I2C_DeInit(I2CV_UNIT);
-    stc_i2c_init_t cfg;
-    float32_t err;
-    (void)I2C_StructInit(&cfg);
-    cfg.u32ClockDiv = I2C_CLK_DIV4;
-    cfg.u32Baudrate = 400000UL;   /* the slave follows the master's clock; this sets the filters' timing */
-    cfg.u32SclTime = 3UL;
-    if (I2C_Init(I2CV_UNIT, &cfg, &err) != LL_OK) return;
-    I2C_SlaveAddrConfig(I2CV_UNIT, I2C_ADDR0, I2C_ADDR_7BIT, ADV_VSYNC_I2C_ADDR);
     if (signIn(I2CV_RX_IRQn, INT_SRC_I2C2_RXI, &I2CV_RxIrq) != LL_OK ||
         signIn(I2CV_TX_IRQn, INT_SRC_I2C2_TXI, &I2CV_TxIrq) != LL_OK ||
         signIn(I2CV_EE_IRQn, INT_SRC_I2C2_EEI, &I2CV_EventIrq) != LL_OK)
         return;
-    I2C_IntCmd(I2CV_UNIT, I2C_INT_RX_FULL | I2C_INT_TX_EMPTY | I2C_INT_STOP | I2C_INT_NACK, ENABLE);
-    I2C_Cmd(I2CV_UNIT, ENABLE);
+    if (periphInit() != LL_OK) return;
     s_on = 1U;
+}
+
+/* Standard I2C bus recovery from this side: SCL clocked (open drain) until the slave holding SDA lets go, then a
+ * STOP. Only while nobody else drives the bus (SDA held low with SCL idle for I2CV_STUCK_MS: no transfer does that,
+ * so the ESP is in reset or being flashed). */
+static void busRecover(void)
+{
+    stc_gpio_init_t g;
+    (void)GPIO_StructInit(&g);
+    g.u16PinDir = PIN_DIR_OUT;
+    g.u16PinOutputType = PIN_OUT_TYPE_NMOS;   /* open drain: never drives a 1 */
+    g.u16PinState = PIN_STAT_SET;
+    GPIO_SetFunc(I2CV_SCL_PORT, I2CV_SCL_PIN, GPIO_FUNC_0);
+    GPIO_SetFunc(I2CV_SDA_PORT, I2CV_SDA_PIN, GPIO_FUNC_0);
+    (void)GPIO_Init(I2CV_SCL_PORT, I2CV_SCL_PIN, &g);
+    (void)GPIO_Init(I2CV_SDA_PORT, I2CV_SDA_PIN, &g);
+    DDL_DelayUS(5U);
+    for (uint8_t i = 0U; i < 9U && (CM_GPIO->PIDRA & I2CV_SDA_PIN) == 0U; i++) {
+        GPIO_ResetPins(I2CV_SCL_PORT, I2CV_SCL_PIN); DDL_DelayUS(5U);
+        GPIO_SetPins(I2CV_SCL_PORT, I2CV_SCL_PIN);   DDL_DelayUS(5U);
+    }
+    GPIO_ResetPins(I2CV_SCL_PORT, I2CV_SCL_PIN); DDL_DelayUS(5U);   /* STOP: SDA rises while SCL is high */
+    GPIO_ResetPins(I2CV_SDA_PORT, I2CV_SDA_PIN); DDL_DelayUS(5U);
+    GPIO_SetPins(I2CV_SCL_PORT, I2CV_SCL_PIN);   DDL_DelayUS(5U);
+    GPIO_SetPins(I2CV_SDA_PORT, I2CV_SDA_PIN);   DDL_DelayUS(5U);
+    g.u16PinDir = PIN_DIR_IN;
+    (void)GPIO_Init(I2CV_SCL_PORT, I2CV_SCL_PIN, &g);
+    (void)GPIO_Init(I2CV_SDA_PORT, I2CV_SDA_PIN, &g);
+    GPIO_SetFunc(I2CV_SCL_PORT, I2CV_SCL_PIN, I2CV_SCL_FUNC);
+    GPIO_SetFunc(I2CV_SDA_PORT, I2CV_SDA_PIN, I2CV_SDA_FUNC);
+}
+
+/* A master reset in the middle of a transfer (the ESP flashed or reset by esptool) can leave a slave on the ESP's bus
+ * driving a 0 bit with SCL released: SDA stays low and every chip disappears, so the ESP takes the board for a
+ * standard one (its boot-time recovery doesn't always free it). No transfer holds SDA low with SCL high for long
+ * (only START/STOP edges): after I2CV_STUCK_MS this slave restarts and clocks the bus free. */
+static void unstick(uint32_t nowMs)
+{
+    const uint32_t in = CM_GPIO->PIDRA;
+    const uint8_t stuck = ((in & I2CV_SDA_PIN) == 0U) && ((in & I2CV_SCL_PIN) != 0U);
+    if (!stuck) { s_stuckSince = 0U; return; }
+    if (s_stuckSince == 0U) { s_stuckSince = nowMs + 1U; return; }
+    if (nowMs + 1U - s_stuckSince < I2CV_STUCK_MS) return;
+    s_stuckSince = 0U;
+    s_unsticks++;
+    I2C_Cmd(I2CV_UNIT, DISABLE);
+    s_txi = 0U;
+    busRecover();
+    (void)periphInit();
 }
 
 void I2CV_Task(uint32_t nowMs)
 {
-    if (!s_on || nowMs - s_lastMs < I2CV_PERIOD_MS) return;
+    if (!s_on) return;
+    unstick(nowMs);
+    if (nowMs - s_lastMs < I2CV_PERIOD_MS) return;
     s_lastMs = nowMs;
     AdvVsync v;
     VSW_Get(&v);
@@ -110,3 +170,4 @@ void I2CV_Task(uint32_t nowMs)
 
 uint32_t I2CV_Reads(void) { return s_reads; }
 uint8_t I2CV_Running(void) { return s_on; }
+uint32_t I2CV_Unsticks(void) { return s_unsticks; }

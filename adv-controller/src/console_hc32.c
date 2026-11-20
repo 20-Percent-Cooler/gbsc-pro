@@ -1,4 +1,7 @@
 /* Device glue of the console (HC32 DDL): USART3 port (non-blocking ring), USB CDC port (usb_console.c), I2C access */
+#include "i2c_vsync.h"
+#include "vsync_wires.h"
+#include <stdio.h>
 #include "console_hc32.h"
 #include "console.h"
 #include "debug_uart.h"
@@ -33,6 +36,19 @@ static void cmdInfo(uint8_t port, const char *args)
     CONSOLE_Write(port, b);
 }
 
+static void cmdVsync(uint8_t port, const char *args)   /* vsync wires and their I2C slave (J17 mod) */
+{
+    (void)args;
+    AdvVsync v;
+    VSW_Get(&v);
+    char b[160];
+    snprintf(b, sizeof(b), "vsync: flags %u src %lu ns out %lu ns phase %lu ns | i2c 0x%02X %s, reads %lu, unsticks %lu\r\n",
+             (unsigned)v.flags, (unsigned long)v.srcPeriodNs, (unsigned long)v.outPeriodNs, (unsigned long)v.phaseNs,
+             (unsigned)ADV_VSYNC_I2C_ADDR, I2CV_Running() ? "on" : "off", (unsigned long)I2CV_Reads(),
+             (unsigned long)I2CV_Unsticks());
+    CONSOLE_Write(port, b);
+}
+
 static void cmdUpdate(uint8_t port, const char *args)
 {
     (void)args;
@@ -49,6 +65,7 @@ void CONSOLE_HC32_Init(const ConsolePort *usb)
 {
     CONSOLE_Init(&kUart, usb, i2cRead, i2cWrite);
     CONSOLE_AddCommand("info", cmdInfo);
+    CONSOLE_AddCommand("vs", cmdVsync);
     CONSOLE_AddCommand("update", cmdUpdate);
     CONSOLE_Banner(0);
     CONSOLE_Write(0, ">");
