@@ -205,22 +205,28 @@ private:
 
     // Sample input and output vsync periods and their phase
     // difference in microseconds
+    // The debug pin is switched here and only here for frame lock (bus 0 = IF vertical period for the input,
+    // 2 = VDS vblank for the output) and given back as found: with the vsync wires running, the pin keeps the
+    // caller's signal except for the one calibration per reset()
     static bool pinPeriodAndPhase(int32_t *periodInput, int32_t *periodOutput, int32_t *phase)
     {
-        fsDebugPrintf("pinPeriodAndPhase(), TEST_BUS_SEL=%d\n", GBS::TEST_BUS_SEL::read());
+        const uint8_t busSel = GBS::TEST_BUS_SEL::read();
+        fsDebugPrintf("pinPeriodAndPhase(), TEST_BUS_SEL=%d\n", busSel);
 
         uint32_t inStart, inStop, outStart, outStop;
         uint32_t inPeriod, outPeriod, diff;
 
-        // calling code needs to ensure debug bus is ready to sample vperiod
-
+        if (busSel != 0x0) GBS::TEST_BUS_SEL::write(0x0);
         if (!vsyncInputSample(&inStart, &inStop)) {
+            GBS::TEST_BUS_SEL::write(busSel);
             return false;
         }
 
         GBS::TEST_BUS_SEL::write(0x2); // 0x2 = VDS (t3t50t4) // measure VDS vblank (VB ST/SP)
         inPeriod = (inStop - inStart); //>> 1;
-        if (!vsyncOutputSample(&outStart, &outStop)) {
+        const bool outOk = vsyncOutputSample(&outStart, &outStop);
+        GBS::TEST_BUS_SEL::write(busSel);
+        if (!outOk) {
             return false;
         }
         outPeriod = (outStop - outStart); //>> 1;
@@ -613,9 +619,7 @@ public:
         bool success = false;
         for (int attempt = 0; attempt < 2; attempt++) {
             // Measure input period and output latency.
-            bool ret = vsyncPeriodAndPhase(&periodInput, nullptr, &phase);
-            // TODO make vsyncPeriodAndPhase() restore TEST_BUS_SEL, not the caller?
-            GBS::TEST_BUS_SEL::write(0x0);
+            bool ret = vsyncPeriodAndPhase(&periodInput, nullptr, &phase);   // gives the test bus back as found
             if (!ret) {
                 SerialM.printf_P(PSTR("runFrequency(): vsyncPeriodAndPhase failed, retrying...\n"));
                 continue;
@@ -633,11 +637,11 @@ public:
                 break;
             }
 
-            // Measure input period again. vsyncPeriodAndPhase()/getPulseTicks()
-            // -> vsyncInputSample() depend on GBS::TEST_BUS_SEL = 0, but
-            // vsyncPeriodAndPhase() sets it to 2.
-            GBS::TEST_BUS_SEL::write(0x0);
+            // Measure input period again: getPulseTicks() -> vsyncInputSample() needs GBS::TEST_BUS_SEL = 0
+            const uint8_t busSel = GBS::TEST_BUS_SEL::read();
+            if (busSel != 0x0) GBS::TEST_BUS_SEL::write(0x0);
             uint32_t periodInput2 = getPulseTicks();
+            if (busSel != 0x0) GBS::TEST_BUS_SEL::write(busSel);
             if (periodInput2 == 0) {
                 SerialM.printf_P(PSTR("runFrequency(): getPulseTicks failed, retrying...\n"));
                 continue;

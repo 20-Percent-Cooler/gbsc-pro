@@ -9142,10 +9142,7 @@ void loop()
         uint16_t pllad = GBS::PLLAD_MD::read();
 
         if (((htotal > (pllad - 3)) && (htotal < (pllad + 3)))) {
-            uint8_t debug_backup = GBS::TEST_BUS_SEL::read();
-            if (debug_backup != 0x0) {
-                GBS::TEST_BUS_SEL::write(0x0);
-            }
+            // FrameSync switches the test bus itself, only when it times on the debug pin (not on the vsync wires)
             //unsigned long startTime = millis();
             fsDebugPrintf("running frame sync, clock gen enabled = %d\n", rto->extClockGenDetected);
             bool success = rto->extClockGenDetected
@@ -9159,10 +9156,6 @@ void loop()
                 rto->syncLockFailIgnore = 16;
             }
             //Serial.println(millis() - startTime);
-
-            if (debug_backup != 0x0) {
-                GBS::TEST_BUS_SEL::write(debug_backup);
-            }
         }
         lastVsyncLock = millis();
     }
