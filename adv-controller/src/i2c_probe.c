@@ -17,7 +17,7 @@ static size_t portFree(void) { return (s_port && s_port->connected()) ? s_port->
 static void out(const char *fmt, ...)
 {
     if (!s_port || !s_port->connected()) return;
-    char b[160];
+    char b[256];   /* the ps line is ~230 characters */
     va_list ap;
     va_start(ap, fmt);
     int n = vsnprintf(b, sizeof(b), fmt, ap);
