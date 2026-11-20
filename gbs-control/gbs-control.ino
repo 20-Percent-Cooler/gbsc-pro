@@ -367,6 +367,25 @@ void externalClockGenResetClock()
                      (unsigned long)lockUs, retried ? " after a PLL reset" : (lockUs ? "" : " (not locked)"), si5351Reg(0x01));
 }
 
+// Source and output field rates from the vsync wires / the vsync-pico add-on: two readings ~0.3 s apart (each a mean of
+// 16 fields: the second one has none from before a preset change) that agree within 200 ppm. false: no reading (the
+// debug pin is used). An LM1881 source (ADV Controller) follows RGB only; the add-on's (ADV_VS_ANY_INPUT) every input.
+static bool wireFieldRates(float &sfr, float &ofr)
+{
+    AdvVsync a, b;
+    const uint8_t both = ADV_VS_SRC | ADV_VS_OUT;
+    const bool rgb = uopt->activeInputType == InputTypeRGBs || uopt->activeInputType == InputTypeRGsB;
+    if (!vsyncI2cRead(a) || (a.flags & both) != both || !a.srcPeriodNs || !a.outPeriodNs) return false;
+    if (!rgb && !(a.flags & ADV_VS_ANY_INPUT)) return false;
+    delay(300);
+    if (!vsyncI2cRead(b) || (b.flags & both) != both || !b.srcPeriodNs || !b.outPeriodNs) return false;
+    auto close = [](uint32_t x, uint32_t y) { return (x > y ? x - y : y - x) <= y / 5000U; };   // 200 ppm
+    if (!close(a.srcPeriodNs, b.srcPeriodNs) || !close(a.outPeriodNs, b.outPeriodNs)) return false;
+    sfr = (float)(1e9 / (double)b.srcPeriodNs);
+    ofr = (float)(1e9 / (double)b.outPeriodNs);
+    return true;
+}
+
 void externalClockGenSyncInOutRate()
 {
     fsDebugPrintf("externalClockGenSyncInOutRate()\n");
@@ -395,14 +414,16 @@ void externalClockGenSyncInOutRate()
         return;
     }
 
-    float sfr = getSourceFieldRate(0);
+    float sfr = 0, ofr = 0;
+    const bool wires = wireFieldRates(sfr, ofr);   // a board whose ESP doesn't see the debug pin still syncs
+    if (!wires) sfr = getSourceFieldRate(0);
     if (sfr < 47.0f || sfr > 86.0f) {
         SerialM.print(F("sync skipped sfr wrong: "));
         SerialM.println(sfr);
         return;
     }
 
-    float ofr = getOutputFrameRate();
+    if (!wires) ofr = getOutputFrameRate();
     if (ofr < 47.0f || ofr > 86.0f) {
         SerialM.print(F("sync skipped ofr wrong: "));
         SerialM.println(ofr);
@@ -416,10 +437,10 @@ void externalClockGenSyncInOutRate()
 
     int32_t diff = rto->freqExtClockGen - old;
 
-    SerialM.print(F("source Hz: "));
+    SerialM.print(wires ? F("source Hz (vsync wires): ") : F("source Hz: "));
     SerialM.print(sfr, 5);
     SerialM.print(F(" new out: "));
-    SerialM.print(getOutputFrameRate(), 5);
+    SerialM.print(wires ? ofr * (float)rto->freqExtClockGen / (float)old : getOutputFrameRate(), 5);
     SerialM.print(F(" clock: "));
     SerialM.print(rto->freqExtClockGen);
     SerialM.print(F(" ("));

@@ -121,7 +121,9 @@ private:
     // generator, and the IF vsync sits ~0.25 ms further from the LM1881 in 480i (N64: 772 vs 1026 us).
     static bool wireCalNeeded[2];    // [interlaced] reset(): the next wire reading in that scan type also measures the pin
     static int32_t wireOffset[2];    // [interlaced] ESP cycles: pin phase = wire phase + wireOffset
+    static const int32_t kNoPinOffsetUs = 1150;
     static bool lastWasWire;         // the last vsyncPeriodAndPhase() came from the wires
+    static uint8_t wireFlags;        // ADV_VS_* of the last wire reading
 
     // The wires' periods and phase (ESP cycles), when a fresh, plausible reading exists. An LM1881 source (the ADV
     // Controller's wires) follows the RGB SCART / RGB SoG sync only: on the other inputs it sees another line. A
@@ -132,6 +134,7 @@ private:
         AdvVsync v;
         if (!vsyncI2cRead(v)) return false;   // no J17 mod / add-on, or no valid reply: the debug pin
         if (!rgb && !(v.flags & ADV_VS_ANY_INPUT)) return false;
+        wireFlags = v.flags;
         const uint8_t all = ADV_VS_SRC | ADV_VS_OUT | ADV_VS_PHASE;
         if ((v.flags & all) != all) return false;
         const uint32_t src = v.srcPeriodNs, out = v.outPeriodNs;
@@ -192,7 +195,22 @@ private:
         const uint8_t m = menuSourceInterlaced(rto->videoStandardInput, profileSourceLines()) ? 1 : 0;
         if (wireCalNeeded[m]) {
             int32_t pIn, pOut, pPh;
-            if (!pinPeriodAndPhase(&pIn, &pOut, &pPh)) return false;
+            if (!pinPeriodAndPhase(&pIn, &pOut, &pPh)) {
+                // A standard board whose ESP doesn't see the debug pin (it reaches J15 only), timed by the vsync-pico
+                // add-on: no calibration possible. Estimate: the pin's input mark (IF vsync, bus 0) comes ~1150 us
+                // after the add-on's source mark (the sync processor's vsync), N64 240p on a PRO, 2026-11-20.
+                if (!(wireFlags & ADV_VS_ANY_INPUT)) return false;
+                const uint32_t mhz = ESP.getCpuFreqMHz();
+                wireOffset[m] = -kNoPinOffsetUs * (int32_t)mhz;
+                wireCalNeeded[m] = false;
+                logPrintf(LC_SYNC, LL_INFO, PSTR("frame lock: vsync-pico, %s, no debug pin at the ESP: offset estimated %ld us"),
+                          m ? "interlaced" : "progressive", (long)(wireOffset[m] / (int32_t)mhz));
+                if (periodInput) *periodInput = wIn;
+                if (periodOutput) *periodOutput = wOut;
+                if (phase) *phase = wrapPhase(wPh + wireOffset[m], wIn);
+                lastWasWire = true;
+                return true;
+            }
             int32_t d = wrapPhase(pPh - wPh, wIn);
             wireOffset[m] = d > wIn / 2 ? d - wIn : d;   // the short way round
             wireCalNeeded[m] = false;
@@ -778,4 +796,7 @@ int32_t FrameSyncManager<GBS, Attrs>::wireOffset[2];
 
 template <class GBS, class Attrs>
 bool FrameSyncManager<GBS, Attrs>::lastWasWire;
+
+template <class GBS, class Attrs>
+uint8_t FrameSyncManager<GBS, Attrs>::wireFlags;
 #endif
