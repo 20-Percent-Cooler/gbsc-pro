@@ -123,13 +123,15 @@ private:
     static int32_t wireOffset[2];    // [interlaced] ESP cycles: pin phase = wire phase + wireOffset
     static bool lastWasWire;         // the last vsyncPeriodAndPhase() came from the wires
 
-    // The wires' periods and phase (ESP cycles), when a fresh, plausible reading exists on an RGB input (the LM1881
-    // follows the RGB SCART / RGB SoG sync; on the other inputs it sees another line)
+    // The wires' periods and phase (ESP cycles), when a fresh, plausible reading exists. An LM1881 source (the ADV
+    // Controller's wires) follows the RGB SCART / RGB SoG sync only: on the other inputs it sees another line. A
+    // timer on the TV5725's own source vsync (the debug pin, ADV_VS_ANY_INPUT: the vsync-pico add-on) is valid on all.
     static bool wireSample(int32_t *periodInput, int32_t *periodOutput, int32_t *phase)
     {
-        if (uopt->activeInputType != InputTypeRGBs && uopt->activeInputType != InputTypeRGsB) return false;
+        const bool rgb = uopt->activeInputType == InputTypeRGBs || uopt->activeInputType == InputTypeRGsB;
         AdvVsync v;
-        if (!vsyncI2cRead(v)) return false;   // no J17 mod, or no valid reply: the debug pin
+        if (!vsyncI2cRead(v)) return false;   // no J17 mod / add-on, or no valid reply: the debug pin
+        if (!rgb && !(v.flags & ADV_VS_ANY_INPUT)) return false;
         const uint8_t all = ADV_VS_SRC | ADV_VS_OUT | ADV_VS_PHASE;
         if ((v.flags & all) != all) return false;
         const uint32_t src = v.srcPeriodNs, out = v.outPeriodNs;
