@@ -28,6 +28,7 @@
     OPT(OPT_OLED_IDLE, "Screensaver|Off") \
     OPT(OPT_OLED_AFTER, "30s|1min|3min|10min") \
     OPT(OPT_DEJITTER,  "Auto|On|Off")   /* input.sync_dejitter (pro/input/sync-source.h) */ \
+    OPT(OPT_CLK_RETUNE, "Glide|Step|Off|Slow glide")   /* output.clock_retune (framesync.h setExternalClockGenFrequencySmooth) */ \
     OPT(OPT_FTL,       "Method 1|Method 2")   /* 0 Vtotal+VSST, 1 Vtotal */ \
     OPT(OPT_HDMI,      "Full=0|Limited=1")   /* Limited: every scaled mode into output.hdmi_black..hdmi_white */ \
     OPT(OPT_MENU_MODE, "Easy|Advanced") \
@@ -91,6 +92,7 @@
     SETTING(output_force60,    "output.force_60hz",     Bool, PalForce60,                    0,      0, 1,      Profile, APPLY_PRESET,      nullptr,     0, CAP_NONE) \
     SETTING(output_style50,    "output.style_50hz",     Enum, style50Hz,                     0,      0, 2,      Profile, APPLY_PRESET,      OPT_STYLE50, 0, CAP_NONE) \
     SETTING(output_match,      "output.match_preset",   Bool, matchPresetSource,             1,      0, 1,      Profile, APPLY_NONE,        nullptr,     0, CAP_NONE) \
+    SETTING(output_clk_retune, "output.clock_retune",   Enum, clockRetune,                   0,      0, 3,      Device,  APPLY_NONE,        OPT_CLK_RETUNE, 0, CAP_NONE) \
     SETTING(output_hdmi,       "output.hdmi_range",     Enum, hdmiLimitedRange,              0,      0, 1,      Profile, APPLY_COLOR,       OPT_HDMI,    0, CAP_NONE) \
     SETTING(output_hdmi_black, "output.hdmi_black",     U8,   hdmiBlackLevel,                16,     0, 20,     Profile, APPLY_COLOR,       nullptr,     0, CAP_NONE) \
     SETTING(output_hdmi_white, "output.hdmi_white",     U8,   hdmiWhiteLevel,                235,    215, 255,  Profile, APPLY_COLOR,       nullptr,     0, CAP_NONE) \

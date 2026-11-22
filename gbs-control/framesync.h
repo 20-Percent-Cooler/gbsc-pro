@@ -63,10 +63,35 @@ namespace MeasurePeriod {
     void stop() { detachInterrupt(DEBUG_IN_PIN); }   // always, also after a timeout
 }
 
+// output.clock_retune 3 (slow glide): the clock generator's actual output, moved 1 kHz per output frame towards
+// rto->freqExtClockGen from loop() (clockGlideTick), ~6 ppm a frame: a monitor sees a slow drift, not a new mode.
+// 0 when no glide runs.
+static uint32_t gGlideHz = 0, gGlideAt = 0;
+
+void clockGlideTick() {
+    if (!gGlideHz) return;
+    const uint32_t now = millis();
+    if (now - gGlideAt < 16) return;
+    gGlideAt = now;
+    const uint32_t target = rto->freqExtClockGen;
+    if (gGlideHz + 1000 < target) gGlideHz += 1000;
+    else if (gGlideHz > target + 1000) gGlideHz -= 1000;
+    else gGlideHz = target;
+    Si.setFreq(0, gGlideHz);
+    if (gGlideHz == target) gGlideHz = 0;
+}
+
 void setExternalClockGenFrequencySmooth(uint32_t freq) {
-    uint32_t current = rto->freqExtClockGen;
+    uint32_t current = gGlideHz ? gGlideHz : rto->freqExtClockGen;   // a slow glide still running: from where it is
 
     rto->freqExtClockGen = freq;
+
+    if (uopt->clockRetune == 1) { gGlideHz = 0; Si.setFreq(0, freq); return; }   // step: one write, one frame
+    if (uopt->clockRetune == 3 && current != freq) {                               // slow glide (clockGlideTick)
+        const uint32_t d = current > freq ? current - freq : freq - current;
+        if (d < 750000) { gGlideHz = current; gGlideAt = millis(); return; }
+    }
+    gGlideHz = 0;
 
     constexpr uint32_t STEP_SIZE_HZ = 1000;
 

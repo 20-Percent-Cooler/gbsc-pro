@@ -304,6 +304,7 @@ static uint32_t si5351WaitLock();
 
 void externalClockGenResetClock()
 {
+    gGlideHz = 0;   // a slow glide (output.clock_retune) ends: the reset writes the clock itself
     if (!rto->extClockGenDetected) {
         return;
     }
@@ -440,6 +441,11 @@ void externalClockGenSyncInOutRate()
         return;
     }
 
+    if (uopt->clockRetune == 2) {   // output.clock_retune Off: the clock stays, the output drifts against the source
+        static uint32_t loggedAt;
+        if (!loggedAt || millis() - loggedAt > 60000) { loggedAt = millis(); SerialM.println(F("clock sync off (output.clock_retune)")); }
+        return;
+    }
     float sfr = 0, ofr = 0;
     const bool wires = wireFieldRates(sfr, ofr);   // a board whose ESP doesn't see the debug pin still syncs
     if (!wires) sfr = getSourceFieldRate(0);
@@ -9360,6 +9366,7 @@ void loop()
     if (!rgbLevelsActive()) inputAutoLoop();   // Source = Auto: scan the paths while there is no signal
     loopWatchMark(LW_INPUT);
     wifiTuneLoop();    // WiFi optimization: the quietest memory clock
+    clockGlideTick();  // output.clock_retune slow glide (framesync.h)
     loopWatchMark(LW_WIFITUNE);
     // An input change forced the watcher on; once the new signal is stable the profile's choice applies again (a
     // same-mode change reloads no preset, so doPostPresetLoadSteps would not do it)

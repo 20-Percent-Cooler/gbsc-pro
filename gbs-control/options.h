@@ -32,6 +32,7 @@ struct userOptions
     uint8_t wantVdsLineFilter;
     uint8_t preferScalingRgbhv;
     uint8_t PalForce60;
+    uint8_t clockRetune;          // output.clock_retune: how the clock follows the source rate (0 glide, 1 step, 2 off, 3 slow)
     uint8_t disableExternalClockGenerator;
     uint8_t matchPresetSource;
     uint8_t wantStepResponse;
