@@ -146,7 +146,8 @@ enum { ADV_VS_SRC = 0x01,      /* source vsync in the last 100 ms */
                                      * every input; the ADV Controller's LM1881 source never sets it (RGB only) */
        ADV_VS_SRC_SETTLED = 0x10,   /* vsync-pico >= 0.6.0: the source period is the current timing (two periods agree
                                      * since the last step > 200 ppm or start; one spanning a switch is dropped) */
-       ADV_VS_OUT_SETTLED = 0x20 }; /* the same for the output period. The ADV Controller never sets them */
+       ADV_VS_OUT_SETTLED = 0x20,   /* the same for the output period. The ADV Controller never sets them */
+       ADV_VS_CTRL = 0x40 };        /* vsync-pico >= 0.7.0: takes clock commands on its address (pro/link/pico-clock.h) */
 typedef struct {
     uint8_t flags;             /* ADV_VS_* */
     uint8_t seq;               /* +1 per output vsync, wraps */

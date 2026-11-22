@@ -11,5 +11,7 @@
 bool vsyncI2cPresent();                 // the add-on or the HC32 answers (probes again every 5 s while neither does)
 bool vsyncI2cRead(AdvVsync& v);         // one fresh frame; false when absent or the read was bad
 bool vsyncI2cIsPico();                  // the slave in use is the vsync-pico add-on (0x33), not the ADV Controller
+bool vsyncI2cPicoCtrl();                // ... and it takes clock commands (ADV_VS_CTRL, vsync-pico >= 0.7.0)
+bool vsyncI2cSend(const uint8_t* f, uint8_t n);   // a command frame to the add-on
 struct VsyncI2cStats { uint32_t reads, fails, probes; bool present; };
 VsyncI2cStats vsyncI2cStats();

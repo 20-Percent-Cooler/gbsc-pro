@@ -9,6 +9,7 @@
 static bool gInit = false, gPresent = false;
 static uint32_t gProbeAt = 0, gReads = 0, gFails = 0, gProbes = 0;
 static uint8_t gFailRun = 0;
+static uint8_t gLastFlags = 0;   // ADV_VS_* of the last good frame
 static uint8_t gAddr = ADV_VSYNC_I2C_ADDR;   // the slave in use: the vsync-pico add-on first, else the ADV Controller
 static const uint32_t kProbeEveryMs = 5000;
 static const uint8_t kLostAfter = 10;   // bad reads in a row: probe again (a reset HC32, a loose wire)
@@ -62,6 +63,7 @@ bool vsyncI2cRead(AdvVsync& v) {
     while (Wire.available()) Wire.read();
     if (advVsyncFrameUnpack(f, n, &v)) {
         gReads++;
+        gLastFlags = v.flags;
         gFailRun = 0;
         return true;
     }
@@ -75,6 +77,15 @@ bool vsyncI2cRead(AdvVsync& v) {
 }
 
 bool vsyncI2cIsPico() { return vsyncI2cPresent() && gAddr == VSYNC_PICO_I2C_ADDR; }
+
+bool vsyncI2cPicoCtrl() { return vsyncI2cIsPico() && (gLastFlags & ADV_VS_CTRL); }
+
+bool vsyncI2cSend(const uint8_t* f, uint8_t n) {
+    if (!vsyncI2cPresent()) return false;
+    Wire.beginTransmission(gAddr);
+    Wire.write(f, n);
+    return Wire.endTransmission() == 0;
+}
 
 VsyncI2cStats vsyncI2cStats() { return {gReads, gFails, gProbes, gPresent}; }
 #endif

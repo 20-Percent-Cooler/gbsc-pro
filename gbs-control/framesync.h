@@ -19,6 +19,7 @@
 #include "pro/input/input-types.h"
 #include "pro/link/adv-link-device.h"
 #include "pro/link/vsync-i2c.h"
+#include "pro/link/pico-clock.h"
 
 uint16_t profileSourceLines();                                          // gbs-control.ino
 bool menuSourceInterlaced(uint8_t videoStandardInput, uint16_t vperiodIf);   // pro/ui/menu-signal.cpp
@@ -87,6 +88,9 @@ void setExternalClockGenFrequencySmooth(uint32_t freq) {
     rto->freqExtClockGen = freq;
 
     if (uopt->clockRetune == 1) { gGlideHz = 0; Si.setFreq(0, freq); return; }   // step: one write, one frame
+    // glide by the vsync-pico add-on (>= 0.7.0): it takes the bus, glides, gives it back (pro/link/pico-clock.h)
+    if (uopt->clockRetune == 0 && current != freq && (current > freq ? current - freq : freq - current) < 750000 &&
+        picoClockGlide(current, freq, 480)) { gGlideHz = 0; return; }
     if (uopt->clockRetune == 3 && current != freq) {                               // slow glide (clockGlideTick)
         const uint32_t d = current > freq ? current - freq : freq - current;
         if (d < 750000) { gGlideHz = current; gGlideAt = millis(); return; }
