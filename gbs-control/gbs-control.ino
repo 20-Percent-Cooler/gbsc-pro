@@ -386,6 +386,30 @@ static bool wireFieldRates(float &sfr, float &ofr)
     return true;
 }
 
+// One rate from the vsync-pico add-on instead of timing the debug pin (which busy-waits with WiFi stopped): readings
+// 40 ms apart, delay() between them so WiFi keeps running, until two agree within 100 ppm (5 tries). The add-on starts
+// its mean again on a period step (a 240p/480i switch, an htotal change), so two frames after one its reading is the
+// new timing. The add-on only: the ADV Controller's 16-field mean lags a step by ~0.27 s. false: time the pin.
+static bool picoRate(bool src, float &hz)
+{
+    if (!vsyncI2cIsPico()) return false;
+    const uint8_t flag = src ? ADV_VS_SRC : ADV_VS_OUT;
+    uint32_t prev = 0;
+    for (uint8_t i = 0; i < 5; i++) {
+        delay(40);
+        AdvVsync v;
+        if (!vsyncI2cRead(v) || !(v.flags & flag)) return false;
+        const uint32_t ns = src ? v.srcPeriodNs : v.outPeriodNs;
+        if (ns < 11600000UL || ns > 25000000UL) return false;   // 40..86 Hz
+        if (prev && (ns > prev ? ns - prev : prev - ns) <= prev / 10000U) {
+            hz = (float)(1e9 / (double)ns);
+            return true;
+        }
+        prev = ns;
+    }
+    return false;
+}
+
 void externalClockGenSyncInOutRate()
 {
     fsDebugPrintf("externalClockGenSyncInOutRate()\n");
@@ -2919,6 +2943,8 @@ boolean applyBestHTotal(uint16_t bestHTotal)
 
 float getSourceFieldRate(boolean useSPBus)
 {
+    float pico;
+    if (!useSPBus && picoRate(true, pico)) return pico;   // the SP bus test (csync decode) needs the pin
     double esp8266_clock_freq = ESP.getCpuFreqMHz() * 1000000;
     uint8_t testBusSelBackup = GBS::TEST_BUS_SEL::read();
     uint8_t spBusSelBackup = GBS::TEST_BUS_SP_SEL::read();
@@ -2979,6 +3005,8 @@ float getSourceFieldRate(boolean useSPBus)
 
 float getOutputFrameRate()
 {
+    float pico;
+    if (picoRate(false, pico)) return pico;
     double esp8266_clock_freq = ESP.getCpuFreqMHz() * 1000000;
     uint8_t testBusSelBackup = GBS::TEST_BUS_SEL::read();
     uint8_t debugPinBackup = GBS::PAD_BOUT_EN::read();

@@ -74,5 +74,7 @@ bool vsyncI2cRead(AdvVsync& v) {
     return false;
 }
 
+bool vsyncI2cIsPico() { return vsyncI2cPresent() && gAddr == VSYNC_PICO_I2C_ADDR; }
+
 VsyncI2cStats vsyncI2cStats() { return {gReads, gFails, gProbes, gPresent}; }
 #endif
