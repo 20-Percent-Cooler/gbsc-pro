@@ -142,8 +142,11 @@ int advSignalUnpack(const uint8_t* in, size_t n, AdvSignal* s);
 enum { ADV_VS_SRC = 0x01,      /* source vsync in the last 100 ms */
        ADV_VS_OUT = 0x02,      /* output vsync in the last 100 ms */
        ADV_VS_PHASE = 0x04,    /* both running: the phase is current */
-       ADV_VS_ANY_INPUT = 0x08 };   /* the source is the TV5725's own vsync (debug pin, vsync-pico add-on): valid on
+       ADV_VS_ANY_INPUT = 0x08,     /* the source is the TV5725's own vsync (debug pin, vsync-pico add-on): valid on
                                      * every input; the ADV Controller's LM1881 source never sets it (RGB only) */
+       ADV_VS_SRC_SETTLED = 0x10,   /* vsync-pico >= 0.6.0: the source period is the current timing (two periods agree
+                                     * since the last step > 200 ppm or start; one spanning a switch is dropped) */
+       ADV_VS_OUT_SETTLED = 0x20 }; /* the same for the output period. The ADV Controller never sets them */
 typedef struct {
     uint8_t flags;             /* ADV_VS_* */
     uint8_t seq;               /* +1 per output vsync, wraps */

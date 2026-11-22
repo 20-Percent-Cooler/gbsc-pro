@@ -386,28 +386,30 @@ static bool wireFieldRates(float &sfr, float &ofr)
     return true;
 }
 
-// One rate from the vsync-pico add-on instead of timing the debug pin (which busy-waits with WiFi stopped): readings
-// 40 ms apart, delay() between them so WiFi keeps running, until two agree within 100 ppm (5 tries). The add-on starts
-// its mean again on a period step (a 240p/480i switch, an htotal change), so two frames after one its reading is the
-// new timing. The add-on only: the ADV Controller's 16-field mean lags a step by ~0.27 s. false: time the pin.
+// One rate from the vsync-pico add-on instead of timing the debug pin (which busy-waits with WiFi stopped). The add-on
+// times both signals all the time and flags a period as settled once two agree after a step (vsync-pico >= 0.6.0).
+// Source: the settled reading at once, one I2C read. Output: the caller may have just changed it (htotal, a preset),
+// so the reading must come from a period that starts after the call: wait 5 ms (the add-on publishes every 4 ms, so
+// its frame counter then includes every output vsync before the call) and take the settled reading two output vsyncs
+// later. delay() between the reads keeps WiFi running. false (no add-on, nothing settled in 150 ms): time the pin.
 static bool picoRate(bool src, float &hz)
 {
     if (!vsyncI2cIsPico()) return false;
-    const uint8_t flag = src ? ADV_VS_SRC : ADV_VS_OUT;
-    uint32_t prev = 0;
-    for (uint8_t i = 0; i < 5; i++) {
-        delay(40);
-        AdvVsync v;
-        if (!vsyncI2cRead(v) || !(v.flags & flag)) return false;
-        const uint32_t ns = src ? v.srcPeriodNs : v.outPeriodNs;
-        if (ns < 11600000UL || ns > 25000000UL) return false;   // 40..86 Hz
-        if (prev && (ns > prev ? ns - prev : prev - ns) <= prev / 10000U) {
-            hz = (float)(1e9 / (double)ns);
-            return true;
-        }
-        prev = ns;
+    const uint8_t need = src ? (ADV_VS_SRC | ADV_VS_SRC_SETTLED) : (ADV_VS_OUT | ADV_VS_OUT_SETTLED);
+    const uint32_t t0 = millis();
+    if (!src) delay(5);
+    AdvVsync v;
+    if (!vsyncI2cRead(v)) return false;
+    const uint8_t seq0 = v.seq;
+    while (!((v.flags & need) == need && (src || (uint8_t)(v.seq - seq0) >= 2))) {
+        if (millis() - t0 > 150) return false;
+        delay(2);
+        if (!vsyncI2cRead(v)) return false;
     }
-    return false;
+    const uint32_t ns = src ? v.srcPeriodNs : v.outPeriodNs;
+    if (ns < 11600000UL || ns > 25000000UL) return false;   // 40..86 Hz
+    hz = (float)(1e9 / (double)ns);
+    return true;
 }
 
 void externalClockGenSyncInOutRate()
