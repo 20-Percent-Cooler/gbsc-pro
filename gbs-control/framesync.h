@@ -90,7 +90,7 @@ void setExternalClockGenFrequencySmooth(uint32_t freq) {
     if (uopt->clockRetune == 1) { gGlideHz = 0; Si.setFreq(0, freq); return; }   // step: one write, one frame
     // glide by the vsync-pico add-on (>= 0.7.0): it takes the bus, glides, gives it back (pro/link/pico-clock.h)
     if (uopt->clockRetune == 0 && current != freq && (current > freq ? current - freq : freq - current) < 750000 &&
-        picoClockGlide(current, freq, 480)) { gGlideHz = 0; return; }
+        picoClockGlide(current, freq, 240)) { gGlideHz = 0; return; }   // 240 us + ~250 us per 400 kHz write: ~150 ms, as the ESP
     if (uopt->clockRetune == 3 && current != freq) {                               // slow glide (clockGlideTick)
         const uint32_t d = current > freq ? current - freq : freq - current;
         if (d < 750000) { gGlideHz = current; gGlideAt = millis(); return; }
