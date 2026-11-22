@@ -449,9 +449,11 @@ void externalClockGenSyncInOutRate()
     float sfr = 0, ofr = 0;
     const bool wires = wireFieldRates(sfr, ofr);   // a board whose ESP doesn't see the debug pin still syncs
     if (!wires) {
-        // one period (the debug pin) or the add-on's newest: during fast 240p/480i flips that can be an in-between
-        // field (60.5 Hz read on a 59.83/59.94 source moved the clock by 1.15 % for 22 s): a second reading has to agree
+        // one period (the debug pin) or the add-on's newest: at a 240p/480i switch the sync processor's vsync point
+        // moves (serration), so the field spanning it measures 258-268 lines (60.5 Hz read on a 59.83/59.94 source
+        // moved the clock by 1.15 %): a second reading > 3 fields later has to agree
         sfr = getSourceFieldRate(0);
+        delay(60);   // > 3 fields: the two readings can't both be the in-between fields of a 240p/480i switch
         const float again = getSourceFieldRate(0);
         if (fabsf(again - sfr) > sfr * 0.0002f) {
             SerialM.print(F("sync skipped sfr unsteady: "));
@@ -469,6 +471,7 @@ void externalClockGenSyncInOutRate()
 
     if (!wires) {
         ofr = getOutputFrameRate();
+        delay(60);
         const float again = getOutputFrameRate();
         if (fabsf(again - ofr) > ofr * 0.0002f) {
             SerialM.print(F("sync skipped ofr unsteady: "));
