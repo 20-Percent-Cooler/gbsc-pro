@@ -35,6 +35,7 @@
 #include "../ui/menu-backend.h"
 #include <SSD1306Wire.h>
 void tv5725WriteReg(uint8_t segment, uint8_t reg, uint8_t value);   // gbs-control.ino
+void externalClockGenSetHz(uint32_t hz);                              // gbs-control.ino
 void contentProbe(const uint8_t* d, uint8_t n);                       // gbs-control.ino
 void tv5725ReadSegment(uint8_t segment, uint8_t out[256]);
 
@@ -298,6 +299,9 @@ static void runFunc(uint8_t id, const ActionRequest& r) {
             break;
         case AF_CONTENT_PROBE:                                  // input search: channel content before a preset
             contentProbe(r.data, r.len);
+            break;
+        case AF_CLOCK_HZ:                                       // data: the clock in Hz, digits (Developer mode)
+            if (r.len) externalClockGenSetHz((uint32_t)strtoul((const char*)r.data, nullptr, 10));
             break;
         case AF_TV5725_REG:                                     // segment, register, value triplets
             for (uint8_t i = 0; i + 2 < r.len; i += 3) tv5725WriteReg(r.data[i], r.data[i + 1], r.data[i + 2]);

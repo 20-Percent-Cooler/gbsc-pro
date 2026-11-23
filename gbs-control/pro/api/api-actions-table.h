@@ -63,6 +63,7 @@
     ACTION(dev_content_probe,  "dev.content_probe",        CAP_NONE, ACTION_DEV | ACTION_PARAM_BYTES, ACT_FUNC, AF_CONTENT_PROBE) \
     ACTION(dev_listen,         "dev.listen",               CAP_ADV,  ACTION_DEV | ACTION_PARAM_BYTES, ACT_FUNC, AF_LISTEN) \
     ACTION(dev_tv5725_reg,     "dev.tv5725_reg",           CAP_NONE, ACTION_DEV | ACTION_PARAM_HEX | ACTION_REGS, ACT_FUNC, AF_TV5725_REG) \
+    ACTION(dev_clock_hz,       "dev.clock_hz",             CAP_NONE, ACTION_DEV | ACTION_PARAM_OPT_TEXT, ACT_FUNC, AF_CLOCK_HZ) \
     ACTION(dev_timings,        "dev.video_timings",        CAP_NONE, ACTION_DEV, ACT_SERIAL, ',') \
     ACTION(dev_adc_filter,     "dev.adc_filter",           CAP_NONE, ACTION_DEV, ACT_SERIAL, 'F') \
     ACTION(dev_debug_view,     "dev.debug_view",           CAP_NONE, ACTION_DEV, ACT_SERIAL, 'D') \

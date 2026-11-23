@@ -7329,6 +7329,24 @@ void contentProbe(const uint8_t* d, uint8_t n)
 }
 
 // dev.tv5725_reg: one raw register write, logged
+// Developer: the clock generator to any frequency (1..250 MHz), as externalClockGenResetClock() does after a preset:
+// the scaler's clock input off while the Si5351 relocks. For trying output timings the presets' clocks don't reach.
+void externalClockGenSetHz(uint32_t hz)
+{
+    if (!rto->extClockGenDetected || hz < 1000000 || hz > 250000000) {
+        logPrintf(LC_API, LL_INFO, PSTR("clock: %lu Hz refused (no clock generator or out of 1..250 MHz)"), (unsigned long)hz);
+        return;
+    }
+    GBS::PAD_CKIN_ENZ::write(1);
+    rto->freqExtClockGen = hz;
+    Si.setFreq(0, hz);
+    Si.enable(0);
+    uint32_t lockUs = si5351WaitLock();
+    GBS::PAD_CKIN_ENZ::write(0);
+    FrameSync::clearFrequency();
+    logPrintf(LC_API, LL_INFO, PSTR("clock: %lu Hz, lock %lu us"), (unsigned long)hz, (unsigned long)lockUs);
+}
+
 void tv5725WriteReg(uint8_t segment, uint8_t reg, uint8_t value)
 {
     if (segment > 5) return;
