@@ -17,7 +17,7 @@
     OPT(OPT_THEMES,    "GBSC PRO|Classic|Light|Retro") \
     OPT(OPT_OSD_POS,   "Top left|Top|Top right|Center left|Center|Center right|Bottom left|Bottom|Bottom right") \
     OPT(OPT_OSD_TIME,  "5s|10s|15s|30s|60s|10min") \
-    OPT(OPT_PRESETS,   "960p=0|480p=1|Custom=2|720p=3|1024p=4|1080p=5|1200p=7|Downscale=6@original|Bypass=10@original") \
+    OPT(OPT_PRESETS,   "960p=0|480p=1|Custom=2|720p=3|1024p=4|1080p=5|1200p=7|1440p=8|Downscale=6@original|Bypass=10@original") \
     OPT(OPT_ASPECT,    "Auto|Force 4:3|Full")   /* the picture's width in the frame (pro/picture/geometry.h) */ \
     OPT(OPT_STYLE50,   "PAL TV|Full height|As 60Hz")   /* the picture of a 50 Hz source */ \
     OPT(OPT_BOARD,     "Auto=0|Standard=2|Pro=1")   /* Standard = the plain gbs-control board */ \

@@ -42,6 +42,7 @@ static const MenuChoiceOpt kChResolution[] SET_PROGMEM = {   // ascending, 960p/
     {S_RES_1024_FIXED, SID_output_preset, 4, SID_output_match, 0, CHO_ADVANCED},
     {S_RES_1080, SID_output_preset, 5, kNone, 0, 0},
     {S_RES_1200, SID_output_preset, 7, kNone, 0, 0},
+    {S_RES_1440, SID_output_preset, 8, kNone, 0, CHO_ADVANCED},
     {S_RES_BYPASS, SID_output_preset, 10, kNone, 0, CHO_ORIGINAL},
 };
 #define CHOICE(arr) {(uint8_t)(sizeof(arr) / sizeof(arr[0])), arr}

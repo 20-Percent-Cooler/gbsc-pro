@@ -1636,6 +1636,7 @@ static const char* presetName(uint8_t id) {
         case 0x03: case 0x13: return "1280x720";
         case 0x05: case 0x15: return "1920x1080";
         case 0x07: case 0x17: return "1920x1200";
+        case 0x18: return "1920x1440";
         case 0x06: case 0x16: return "Downscale";
         case 0x04: return "720x480";
         case 0x14: return "768x576";
@@ -1721,6 +1722,7 @@ static const char* presetShort(uint8_t id) {
         case 0x03: case 0x13: return "720p";
         case 0x05: case 0x15: return "1080p";
         case 0x07: case 0x17: return "1200p";
+        case 0x18: return "1440p";
         case 0x06: case 0x16: return "Down";
         case 0x04: return "480p";
         case 0x14: return "576p";

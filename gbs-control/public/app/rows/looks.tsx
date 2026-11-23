@@ -54,5 +54,5 @@ export const RES_HELP: Record<string, [string, string]> = {
   "Downscale": ["Smaller picture", "for low resolution screens"], "480p/576p": ["Line doubled", "SD screens and capture cards"],
   "720p": ["HD ready", "older HD TVs"], "960p fixed": ["Always 960p", "4 lines per line at 60 Hz"],
   "960p/1024p": ["Even scanlines", "960p at 60 Hz, 1024p at 50 Hz"], "1024p fixed": ["Always 1024p", "4 lines per line at 50 Hz"],
-  "1080p": ["Most TVs", "the safe choice"], "1200p": ["Even scanlines ×5", "at 60 Hz, on monitors that accept it"], "HD bypass": ["Passes HD through", "for HD sources"],
+  "1080p": ["Most TVs", "the safe choice"], "1200p": ["Even scanlines ×5", "at 60 Hz, on monitors that accept it"], "1440p": ["288p ×5 by ×6, exact", "PAL, VGA out: HDMI stops at 1200"], "HD bypass": ["Passes HD through", "for HD sources"],
 };

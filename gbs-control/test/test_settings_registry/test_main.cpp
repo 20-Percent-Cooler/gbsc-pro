@@ -109,7 +109,7 @@ void test_parse_bool_number_and_enum(void) {
 void test_parse_enum_accepts_number(void) {
     uint16_t v;
     TEST_ASSERT_TRUE(settingsParse(defOf("osd.theme"), "2", v)); TEST_ASSERT_EQUAL_UINT16(2, v);
-    TEST_ASSERT_FALSE(settingsParse(defOf("output.preset"), "8", v));   // 8 is not an option value (7 = 1200p)
+    TEST_ASSERT_FALSE(settingsParse(defOf("output.preset"), "9", v));   // 9 is not an option value (8 = 1440p)
 }
 
 void test_format_enum_by_name(void) {

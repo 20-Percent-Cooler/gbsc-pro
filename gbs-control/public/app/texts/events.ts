@@ -5,7 +5,7 @@ export interface EventCtx { inputName: (input: number) => string; profileName: (
 export interface EventView { title: string; sub: string; icon: string; cls: "" | "g" | "w" }
 
 const CHANNELS = ["Stable", "Beta"];
-const PRESETS: Record<number, string> = { 1: "960p", 2: "1024p", 3: "720p", 4: "480p", 5: "1080p", 6: "Downscale", 7: "1200p" };
+const PRESETS: Record<number, string> = { 1: "960p", 2: "1024p", 3: "720p", 4: "480p", 5: "1080p", 6: "Downscale", 7: "1200p", 8: "1440p" };
 
 // rto->presetID: low digit the output, 0x10 a PAL source (480p becomes 576p), from 0x21 the bypass presets
 export function presetName(id: number): string {

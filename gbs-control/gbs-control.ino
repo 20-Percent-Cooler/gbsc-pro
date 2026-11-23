@@ -11,6 +11,7 @@
 #include "pal_1920x1080.h"
 #include "ntsc_1920x1200.h"
 #include "pal_1920x1200.h"
+#include "pal_1920x1440.h"
 #include "pal_downscale.h"
 #include "presetMdSection.h"
 #include "presetDeinterlacerSection.h"
@@ -3410,7 +3411,8 @@ void doPostPresetLoadSteps()
         GBS::OUT_SYNC_SEL::write(1); // 0_4f 1=sync from HDBypass, 2=sync from SP
         rto->autoBestHtotalEnabled = false;
     } else {
-        rto->autoBestHtotalEnabled = true;
+        // 1440p (0x18): integer geometry, the blanking positions are part of it; the clock generator matches the rate
+        rto->autoBestHtotalEnabled = rto->presetID != 0x18;
     }
 
     rto->phaseADC = GBS::PA_ADC_S::read(); // we can't know which is right, get from preset
@@ -4076,6 +4078,8 @@ void doPostPresetLoadSteps()
         SerialM.print(F("1920x1080"));
     else if (rto->presetID == 0x07 || rto->presetID == 0x17)
         SerialM.print(F("1920x1200"));
+    else if (rto->presetID == 0x18)
+        SerialM.print(F("1920x1440"));
     else if (rto->presetID == 0x06 || rto->presetID == 0x16)
         SerialM.print(F("downscale"));
     else if (rto->presetID == 0x04)
@@ -4354,8 +4358,8 @@ void applyPresets(uint8_t result)
 #endif
         else if (uopt->presetPreference == 5) {
             writeProgramArrayNew(ntsc_1920x1080, false);
-        } else if (uopt->presetPreference == Output1200P) {
-            writeProgramArrayNew(ntsc_1920x1200, false);
+        } else if (uopt->presetPreference == Output1200P || uopt->presetPreference == Output1440P) {
+            writeProgramArrayNew(ntsc_1920x1200, false);   // 1440p: no NTSC table yet, 1200p instead
         } else if (uopt->presetPreference == 6) {
             writeProgramArrayNew(ntsc_downscale, false);
         }
@@ -4387,6 +4391,8 @@ void applyPresets(uint8_t result)
             writeProgramArrayNew(pal_1920x1080, false);
         } else if (uopt->presetPreference == Output1200P) {
             writeProgramArrayNew(pal_1920x1200, false);   // a real 1200p at 50 Hz
+        } else if (uopt->presetPreference == Output1440P) {
+            writeProgramArrayNew(pal_1920x1440, false);   // 288p x6 / x5 integer
         } else if (uopt->presetPreference == 6) {
             writeProgramArrayNew(pal_downscale, false);
         }

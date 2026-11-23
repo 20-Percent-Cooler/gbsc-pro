@@ -116,7 +116,7 @@ void test_tree_settings_and_actions_exist(void) {
         }
         if (n.type == N_CHOICE) {
             MenuChoice c; menuChoiceRead(n.ref, c);
-            TEST_ASSERT_TRUE(c.count >= 2 && c.count <= 10);
+            TEST_ASSERT_TRUE(c.count >= 2 && c.count <= 12);
             for (uint8_t i = 0; i < c.count; i++) {
                 MenuChoiceOpt o; menuChoiceOptRead(c, i, o);
                 SettingDef d; settingsDefAt(o.sid1, d);

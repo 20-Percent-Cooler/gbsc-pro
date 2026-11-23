@@ -33,7 +33,7 @@ profiles.switch_input on=1 off=0
 profiles.startup last_used=0 defaults=1
 system.devmode on=1 off=0
 system.menu_mode easy=0 advanced=1
-output.preset 960p=0 480p=1 custom=2 720p=3 1024p=4 1080p=5 1200p=7 downscale=6 bypass=10
+output.preset 960p=0 480p=1 custom=2 720p=3 1024p=4 1080p=5 1200p=7 1440p=8 downscale=6 bypass=10
 output.frame_lock on=1 off=0
 output.frame_lock_method method_1=0 method_2=1
 output.force_60hz on=1 off=0

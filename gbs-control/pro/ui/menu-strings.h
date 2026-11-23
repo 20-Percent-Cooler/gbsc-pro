@@ -223,6 +223,7 @@
     S(S_RES_1024_FIXED, "1024p fixed") \
     S(S_RES_1080, "1080p") \
     S(S_RES_1200, "1200p") \
+    S(S_RES_1440, "1440p") \
     S(S_RES_BYPASS, "HD bypass") \
     S(S_ON, "On") \
     S(S_DELETE, "Delete") \
