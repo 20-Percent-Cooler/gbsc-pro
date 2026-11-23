@@ -12,6 +12,7 @@
 #include "ntsc_1920x1200.h"
 #include "pal_1920x1200.h"
 #include "pal_1920x1440.h"
+#include "ntsc_1920x1440.h"
 #include "pal_downscale.h"
 #include "presetMdSection.h"
 #include "presetDeinterlacerSection.h"
@@ -335,6 +336,8 @@ void externalClockGenResetClock()
         SerialM.print(F("preset display clock: 0x"));
         SerialM.println(activeDisplayClock, HEX);
     }
+    if (GBS::GBS_PRESET_ID::read() == 0x08)
+        rto->freqExtClockGen = 178400000;   // NTSC 1440p: 2048 x 1456 at 59.8 Hz, above the presets' 162 MHz code
 
     // problem: around 108MHz the library seems to double the clock
     // maybe there are regs to check for this and resetPLL
@@ -3412,7 +3415,7 @@ void doPostPresetLoadSteps()
         rto->autoBestHtotalEnabled = false;
     } else {
         // 1440p (0x18): integer geometry, the blanking positions are part of it; the clock generator matches the rate
-        rto->autoBestHtotalEnabled = rto->presetID != 0x18;
+        rto->autoBestHtotalEnabled = rto->presetID != 0x18 && rto->presetID != 0x08;
     }
 
     rto->phaseADC = GBS::PA_ADC_S::read(); // we can't know which is right, get from preset
@@ -4078,7 +4081,7 @@ void doPostPresetLoadSteps()
         SerialM.print(F("1920x1080"));
     else if (rto->presetID == 0x07 || rto->presetID == 0x17)
         SerialM.print(F("1920x1200"));
-    else if (rto->presetID == 0x18)
+    else if (rto->presetID == 0x08 || rto->presetID == 0x18)
         SerialM.print(F("1920x1440"));
     else if (rto->presetID == 0x06 || rto->presetID == 0x16)
         SerialM.print(F("downscale"));
@@ -4358,8 +4361,10 @@ void applyPresets(uint8_t result)
 #endif
         else if (uopt->presetPreference == 5) {
             writeProgramArrayNew(ntsc_1920x1080, false);
-        } else if (uopt->presetPreference == Output1200P || uopt->presetPreference == Output1440P) {
-            writeProgramArrayNew(ntsc_1920x1200, false);   // 1440p: no NTSC table yet, 1200p instead
+        } else if (uopt->presetPreference == Output1200P) {
+            writeProgramArrayNew(ntsc_1920x1200, false);
+        } else if (uopt->presetPreference == Output1440P) {
+            writeProgramArrayNew(rto->extClockGenDetected ? ntsc_1920x1440 : ntsc_1920x1200, false);   // 178.4 MHz: clock generator only
         } else if (uopt->presetPreference == 6) {
             writeProgramArrayNew(ntsc_downscale, false);
         }

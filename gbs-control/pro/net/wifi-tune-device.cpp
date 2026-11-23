@@ -109,7 +109,9 @@ static void dropBurst(const char* why) {
     logPrintf(LC_WIFI, LL_INFO, PSTR("wifi tune: ch %u burst dropped (%s)"), gTune.channel(), why);
 }
 
-static bool inBypass() { return rto->outModeHdBypass || rto->presetID == kPresetBypassRgbhv; }
+static bool inBypass() {   // NTSC 1440p (0x08): its 162 MHz memory clock is part of the mode (129.6 MHz ghosts)
+    return rto->outModeHdBypass || rto->presetID == kPresetBypassRgbhv || rto->presetID == 0x08;
+}
 
 static bool pictureStable(uint32_t now) {
     // the input search identifying a cable has a sync and no preset yet, and its sampling stalls the loop
@@ -313,7 +315,7 @@ void wifiTunePresetLoaded() {
     if (gState != ST_IDLE) dropBurst("preset loaded");
     gStableRun = false;
     gTune.presetLoaded(gPresetClock);
-    if (!uopt->wifiOptimize) return;
+    if (!uopt->wifiOptimize || inBypass()) return;
     uint8_t c = gTune.clockFor(gPresetClock);
     if (c == gPresetClock) return;
     GBS::PLL_MS::write(c);   // the caller's ResetSDRAM() follows

@@ -49,7 +49,7 @@ ColorRegs pictureColor(const ColorIn& in) {
     // HDMI range last, on the computed values: Full sends the scaler's whole range; Limited compresses every scaled mode
     // into black..white (default 16..235, CEA-861 limited range), for a TV or an adapter that reads limited range. The
     // levels are settings: how a TV and the HDMI converter treat a signal differs from one to another.
-    static const uint8_t kScaled[] = {0x01, 0x11, 0x02, 0x12, 0x03, 0x13, 0x04, 0x14, 0x05, 0x15, 0x07, 0x17, 0x18};
+    static const uint8_t kScaled[] = {0x01, 0x11, 0x02, 0x12, 0x03, 0x13, 0x04, 0x14, 0x05, 0x15, 0x07, 0x17, 0x08, 0x18};
     bool compress = !in.hdBypass && in.hdmiRange == 1 && presetIn(in.presetId, kScaled, sizeof(kScaled));
     if (compress && in.hdmiWhite > in.hdmiBlack) {
         int span = in.hdmiWhite - in.hdmiBlack;

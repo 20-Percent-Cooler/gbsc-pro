@@ -18,7 +18,7 @@ const char* logPresetName(uint8_t id) {
         case 0x03: case 0x13: return PSTR("1280x720");
         case 0x05: case 0x15: return PSTR("1920x1080");
         case 0x07: case 0x17: return PSTR("1920x1200");
-        case 0x18: return PSTR("1920x1440");
+        case 0x08: case 0x18: return PSTR("1920x1440");
         case 0x06: case 0x16: return PSTR("downscale");
         case 0x04: return PSTR("720x480");
         case 0x14: return PSTR("768x576");

@@ -11,7 +11,7 @@ enum PresetPreference : uint8_t {
     Output1080P = 5,
     OutputDownscale = 6,
     Output1200P = 7,       // issue #35: ntsc_1920x1200 / pal_1920x1200 (experimental)
-    Output1440P = 8,       // pal_1920x1440: 288p x6/x5 integer (PAL sources; NTSC falls back to 1200p for now)
+    Output1440P = 8,       // pal_1920x1440 (288p x6/x5) / ntsc_1920x1440 (240p x6/x6, 178.4 MHz: needs the clock generator)
     OutputBypass = 10,
 };
 
